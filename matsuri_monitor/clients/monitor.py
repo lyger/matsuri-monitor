@@ -1,18 +1,26 @@
 import json
-import multiprocessing as mp
+import logging
 import queue
-import requests
 import time
+from datetime import datetime, timezone
+from urllib.parse import parse_qs, urlparse
 
+import requests
+import tornado.ioloop
+import tornado.options
 from bs4 import BeautifulSoup
-from flask import current_app
-from urllib.parse import urlparse, parse_qs
 
-from matsuri_monitor import chat, datashare
+from matsuri_monitor import chat
+
+INFERRED_UTCOFFSET = datetime.now().astimezone().tzinfo.utcoffset(None).seconds // 3600
+
+tornado.options.define('api-key', type=str, help='YouTube API key')
+tornado.options.define('utcoffset', default=INFERRED_UTCOFFSET, type=int, help='Offset in hours from UTC')
+
+logger = logging.getLogger('tornado.general')
 
 VIDEO_API_ENDPOINT = 'https://www.googleapis.com/youtube/v3/videos'
 
-VIDEO_URL_TEMPLATE = 'https://www.youtube.com/watch?v={video_id}'
 INITIAL_CHAT_ENDPOINT_TEMPLATE = 'https://www.youtube.com/live_chat/get_live_chat?continuation={continuation}'
 CHAT_ENDPOINT_TEMPLATE = 'https://www.youtube.com/live_chat/get_live_chat?continuation={continuation}&pbj=1'
 
@@ -29,19 +37,6 @@ TIMESTAMP_SUPBATH = 'addChatItemAction.item.liveChatTextMessageRenderer.timestam
 
 INIT_RETRIES = 5
 UPDATE_INTERVAL = 1
-
-def get_paths(d, prefix=''):
-    if isinstance(d, dict):
-        gen = d.items()
-    elif isinstance(d, list):
-        gen = enumerate(d)
-    else:
-        raise ValueError()
-    for k, v in gen:
-        if isinstance(v, dict) or isinstance(v, list):
-            yield from get_paths(v, f'{prefix}{k}.')
-        else:
-            yield f'{prefix}{k}'
 
 def has_path(d, path):
     for k in path.split('.'):
@@ -63,19 +58,25 @@ def traverse(d, path):
     return d
 
 
-class Monitor(mp.Process):
+class Monitor:
 
-    def __init__(self, video_id):
-        self.events = mp.Queue()
-        self.conn_in, self.conn_out = mp.Pipe()
-        self.video_id = video_id
-        self.video_url = VIDEO_URL_TEMPLATE.format(video_id=video_id)
+    def __init__(self, info: chat.VideoInfo, report: chat.LiveReport):
+        super().__init__()
+        self.info = info
+        self.report = report
+        self._running = False
+        self.utcoffset_seconds = tornado.options.options.utcoffset * 3600
 
-    def get_live_info(self):
+    @property
+    def is_running(self):
+        return self._running
+
+    def get_live_details(self):
+
         params = {
             'part': 'liveStreamingDetails',
-            'id': self.video_id,
-            'key': datashare.api_key.value,
+            'id': self.info.id,
+            'key': tornado.options.options.api_key,
         }
 
         resp = requests.get(VIDEO_API_ENDPOINT, params=params)
@@ -83,9 +84,11 @@ class Monitor(mp.Process):
         items = resp.json()['items']
 
         if len(items) < 1:
-            raise ValueError('TODO')
+            raise RuntimeError('Could not get live broadcast info')
 
-    def get_initial_chat(self, continuation):
+        return items[0]['liveStreamingDetails']
+
+    def get_initial_chat(self, continuation: str) -> dict:
         endpoint = INITIAL_CHAT_ENDPOINT_TEMPLATE.format(continuation=continuation)
 
         soup = BeautifulSoup(requests.get(endpoint, headers=REQUEST_HEADERS).text, features='lxml')
@@ -98,7 +101,7 @@ class Monitor(mp.Process):
 
         return json.loads(initial_data_str)
 
-    def get_next_chat(self, continuation_obj):
+    def get_next_chat(self, continuation_obj: dict) -> dict:
         continuation = None
 
         # YouTube's API has various "continuationData" types, but any will do if it has a continuation token
@@ -117,21 +120,36 @@ class Monitor(mp.Process):
         return resp.json()['response']
 
     def run(self):
-        soup = BeautifulSoup(requests.get(self.video_url).text, features='lxml')
-        chat_url = soup.find(id='live-chat-iframe').attrs['src']
+        live_info = self.get_live_details()
 
-        continuation = parse_qs(urlparse(chat_url).query)['continuation'][0]
+        start_timestamp = datetime.fromisoformat(
+            live_info['actualStartTime'].rstrip('zZ')
+        ).replace(tzinfo=timezone.utc).timestamp()
+        print(start_timestamp)
+
+        self.info.start_timestamp = start_timestamp
 
         for retry in range(INIT_RETRIES):
             try:
+                soup = BeautifulSoup(requests.get(self.info.url).text, features='lxml')
+                chat_url = soup.find(id='live-chat-iframe').attrs['src']
+
+                continuation = parse_qs(urlparse(chat_url).query)['continuation'][0]
+
                 chat_obj = self.get_initial_chat(continuation)
                 break
-            except:
+
+            except Exception as e:
+                if retry == INIT_RETRIES - 1:
+                    logger.exception(f'Failed to initialize in monitor for video_id={self.info.id}')
+                    raise e
                 continue
 
         while True:
             if has_path(chat_obj, ACTIONS_PATH):
                 actions = traverse(chat_obj, ACTIONS_PATH)
+
+                new_messages = []
 
                 for action in actions:
                     if not all(
@@ -144,24 +162,29 @@ class Monitor(mp.Process):
                     text = ''.join(run.get('text', '') for run in traverse(action, TEXT_RUNS_SUBPATH))
                     timestamp = float(traverse(action, TIMESTAMP_SUPBATH)) / 1_000_000
 
-                    message = chat.Message(author=author, text=text, timestamp=timestamp)
+                    message = chat.Message(
+                        author=author,
+                        text=text,
+                        timestamp=timestamp,
+                        relative_timestamp=timestamp - start_timestamp,
+                    )
 
-                    self.events.put_nowait(message)
+                    new_messages.append(message)
 
-                    print(message)
+                self.report.add_messages(new_messages)
             
             time.sleep(UPDATE_INTERVAL)
 
             try:
                 continuation_obj = traverse(chat_obj, CONTINUATION_PATH)
                 chat_obj = self.get_next_chat(continuation_obj)
-            except KeyError:
+            except (KeyError, json.JSONDecodeError):
                 break
-    
-    def iter_events(self):
-        while True:
-            try:
-                event = self.events.get_nowait()
-                yield event
-            except queue.Empty:
-                break
+
+        self._running = False
+
+    def start(self, current_ioloop=None):
+        if current_ioloop is None:
+            current_ioloop = tornado.ioloop.IOLoop.current()
+        self._running = True
+        current_ioloop.run_in_executor(None, self.run)

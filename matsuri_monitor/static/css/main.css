@@ -1,0 +1,49 @@
+.panel-heading {
+  margin-bottom: 0!important;
+}
+.panel-block .media {
+  padding-top: 0;
+}
+
+.media-content {
+  overflow: hidden;
+  position: relative;
+  transition: height 0.5s;
+}
+.media-content.collapsed {
+  height: 40px;
+}
+.media-content.collapsed::after {
+  content: "";
+  position: absolute;
+  z-index: 10;
+  bottom: 0;
+  left: 0;
+  pointer-events: none;
+  background-image: linear-gradient(to bottom, rgba(255,255,255, 0),  rgba(255,255,255, 1) 90%);
+  width: 100%;
+  height: 25px;
+}
+
+.table {
+  background: none;
+}
+td:nth-child(1) {
+  width: 20%;
+  max-width: 20%;
+}
+td:nth-child(2) {
+  width: 80%;
+  min-width: 80%;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.tag.is-medium {
+  padding-bottom: calc(.5em - 1px);
+  padding-left: 1em;
+  padding-right: 1em;
+  padding-top: calc(.5em - 1px);
+  height: 2.5em;
+}

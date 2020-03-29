@@ -1,4 +1,6 @@
 bs4
-flask
+cachetools
+jsonschema
+tornado
 lxml
 requests
