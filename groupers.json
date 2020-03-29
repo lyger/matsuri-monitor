@@ -4,14 +4,8 @@
         "value": "まつり",
         "interval": 10,
         "min_len": 5,
-        "notify": true
-    },
-    {
-        "type": "regex",
-        "value": "草",
-        "interval": 5,
-        "min_len": 10,
-        "notify": false
+        "notify": true,
+        "skip_channels": ["UCQ0UDLQCjY0rmuxCDE38FGg"]
     },
     {
         "type": "username",

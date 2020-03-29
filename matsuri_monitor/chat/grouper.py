@@ -23,7 +23,12 @@ GROUPER_SCHEMA = {
             'interval': {'type': 'number'},
             'min_len': {'type': 'number'},
             'notify': {'type': 'boolean'},
-        }
+            'skip_channels': {
+                'type': 'array',
+                'items': {'type': 'string'},
+            },
+        },
+        'required': ['type', 'value', 'interval'],
     }
 }
 
@@ -51,6 +56,7 @@ class Grouper:
     interval: float
     min_len: int
     notify: bool
+    skip_channels: List[str]
 
     @classmethod
     def load(cls) -> List[Grouper]:
@@ -72,8 +78,9 @@ class Grouper:
                 condition=condition,
                 description=description,
                 interval=gdef['interval'],
-                min_len=gdef['min_len'],
-                notify=gdef['notify'],
+                min_len=gdef.get('min_len', 1),
+                notify=gdef.get('notify', False),
+                skip_channels=gdef.get('skip_channels', []),
             ))
 
         return groupers

@@ -103,8 +103,6 @@ const NOTIF_CUTOFF = 30;
 function GroupList(props) {
   const prevGroups = usePrevious(props.info.groups, []);
 
-  if (props.info.groups.length === 0) return null;
-
   useEffect(() => {
     if (!props.info.notify || !notifEnabled()) return;
   
@@ -120,6 +118,7 @@ function GroupList(props) {
       .forEach((group) => props.onNew(props.info.description, group));
   }, [props.info.groups]);
 
+  if (props.info.groups.length === 0) return null;
 
   return e('nav', {className: 'panel'},
     e('p', {className: 'panel-heading'}, props.info.description),
@@ -147,7 +146,7 @@ function LiveReport(props) {
         e('img', {src: props.info.thumbnail_url})
       )
     ),
-    e('div', {className: 'media-content'},
+    e('div', {className: 'media-content', style: {overflow: 'visible'}},
       e('div', {className: 'content'},
         e('h1', {className: 'title is-4', id: props.info.id},
           e('a', {href: props.info.url, target: '_blank'}, props.info.title)
@@ -178,12 +177,14 @@ function ReportApp(props) {
   return e(React.Fragment, null,
     reportsFiltered.length > 0
     ? reportsFiltered.map((info, i) =>  e(LiveReport, {key: i, info: info}))
-    : e('p', {className: 'subtitle is-5 has-text-centered'}, 'Nothing yet')
+    : e('div', {className: 'notification'},
+        e('p', {className: 'subtitle is-5 has-text-centered'}, 'Nothing yet')
+      )
   )
 }
 
 ReactDOM.render(e(ReportApp, {endpoint: '/_monitor/live.json', interval: 5000}),  document.getElementById('live-root'));
-ReactDOM.render(e(ReportApp, {endpoint: '/_monitor/archive.json', interval: 60000}),  document.getElementById('archive-root'));
+ReactDOM.render(e(ReportApp, {endpoint: '/_monitor/archive.json', interval: 30000}),  document.getElementById('archive-root'));
 
 /*****************
  * NOTIFICATIONS *

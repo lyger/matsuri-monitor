@@ -7,7 +7,6 @@ from matsuri_monitor import chat
 
 CHANNEL_ENDPOINT = 'https://storage.googleapis.com/vthell-data/channels.json'
 LIVE_ENDPOINT = 'https://storage.googleapis.com/vthell-data/live.json'
-VIDEO_ENDPOINT = 'https://storage.googleapis.com/vthell-data/videos.json'
 
 
 class Jetri:
@@ -19,8 +18,8 @@ class Jetri:
         self.lives = pd.DataFrame(index=pd.Series(name='id'), columns=['title', 'type', 'startTime', 'channel'])
 
     def update(self):
+        """Re-accesses jetri endpoints and updates active lives"""
         lives = requests.get(LIVE_ENDPOINT).json()
-        videos = requests.get(VIDEO_ENDPOINT).json()['videos']
 
         with self._lock:
             to_concat = []
@@ -35,16 +34,19 @@ class Jetri:
 
     @property
     def currently_live(self):
+        """Returns IDs of currently live streams"""
         return self.lives[self.lives['type'] == 'live'].index.tolist()
     
-    def get_channel_info(self, channel_id):
+    def get_channel_info(self, channel_id: str):
+        """Returns a ChannelInfo object for the given channel ID"""
         return chat.ChannelInfo(
             id=channel_id,
             name=self.channels.loc[channel_id]['name'],
             thumbnail_url=self.channels.loc[channel_id]['thumbnail'],
         )
 
-    def get_live_info(self, video_id):
+    def get_live_info(self, video_id: str):
+        """Returns a VideoInfo object for the given video ID"""
         return chat.VideoInfo(
             id=video_id,
             title=self.lives.loc[video_id]['title'],

@@ -22,11 +22,18 @@ class LiveReport:
         self.__finalized = False
 
     def set_groupers(self, groupers: List[Grouper]):
+        """Set the groupers used to generate this report"""
+        if self.__finalized:
+            raise RuntimeError('Cannot modify a finalized LiveReport')
+
+        include = lambda g: self.info.channel.id not in g.skip_channels
         with self.group_lock:
-            self.group_lists = list(map(GroupList, groupers))
+            self.group_lists = list(map(GroupList, filter(include, groupers)))
+
         self.add_messages([])
 
     def add_messages(self, messages: List[Message]):
+        """Add new messages and recompute groups from them"""
         if self.__finalized:
             raise RuntimeError('Cannot modify a finalized LiveReport')
 
@@ -41,13 +48,24 @@ class LiveReport:
                 group_list.update(self.messages)
     
     def finalize(self):
+        """Clean up and freeze state of report once live ends"""
         # Drop message buffer to save memory; we only keep the groups
         self.messages.clear()
+
+        # Drop group lists with no groups in them
+        with self.group_lock:
+            self.group_lists = list(filter(lambda gl: len(gl) > 0, self.group_lists))
+
+        # Turn off notifications
+        for group_list in self.group_lists:
+            group_list.notify = False
+
         # Permanently cache the JSON representation
         self.json = cached(LRUCache(1))(self.json)
         self.__finalized = True
 
     def json(self):
+        """Return a JSON representation of this report"""
         with self.group_lock:
             ret = {
                 'id': self.info.id,
@@ -80,4 +98,5 @@ class LiveReport:
         return ret
 
     def __len__(self):
+        """The total number of groups in this report, across all lists"""
         return sum(map(len, self.group_lists))

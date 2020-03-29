@@ -61,6 +61,15 @@ def traverse(d, path):
 class Monitor:
 
     def __init__(self, info: chat.VideoInfo, report: chat.LiveReport):
+        """init
+        
+        Parameters
+        ----------
+        info
+            VideoInfo for the video to monitor
+        report
+            LiveReport to write chat messages to
+        """
         super().__init__()
         self.info = info
         self.report = report
@@ -72,6 +81,7 @@ class Monitor:
         return self._running
 
     def get_live_details(self):
+        """Get live details of the live this monitor is monitoring"""
 
         params = {
             'part': 'liveStreamingDetails',
@@ -89,6 +99,8 @@ class Monitor:
         return items[0]['liveStreamingDetails']
 
     def get_initial_chat(self, continuation: str) -> dict:
+        """Get initial chat JSON object from a continuation token"""
+
         endpoint = INITIAL_CHAT_ENDPOINT_TEMPLATE.format(continuation=continuation)
 
         soup = BeautifulSoup(requests.get(endpoint, headers=REQUEST_HEADERS).text, features='lxml')
@@ -102,6 +114,8 @@ class Monitor:
         return json.loads(initial_data_str)
 
     def get_next_chat(self, continuation_obj: dict) -> dict:
+        """Get next chat JSON object from the previous object's continuation object"""
+
         continuation = None
 
         # YouTube's API has various "continuationData" types, but any will do if it has a continuation token
@@ -120,12 +134,13 @@ class Monitor:
         return resp.json()['response']
 
     def run(self):
+        """Monitor process"""
+
         live_info = self.get_live_details()
 
         start_timestamp = datetime.fromisoformat(
             live_info['actualStartTime'].rstrip('zZ')
         ).replace(tzinfo=timezone.utc).timestamp()
-        print(start_timestamp)
 
         self.info.start_timestamp = start_timestamp
 
@@ -183,7 +198,9 @@ class Monitor:
 
         self._running = False
 
-    def start(self, current_ioloop=None):
+    def start(self, current_ioloop: tornado.ioloop.IOLoop = None):
+        """Spawn monitor process in executor on the current IOLoop"""
+
         if current_ioloop is None:
             current_ioloop = tornado.ioloop.IOLoop.current()
         self._running = True

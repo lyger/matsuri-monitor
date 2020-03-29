@@ -20,7 +20,16 @@ class Supervisor:
         self.archive_reports: List[chat.LiveReport] = []
         self.groupers = chat.Grouper.load()
 
-    def update(self, current_ioloop = None):
+    def update(self, current_ioloop: tornado.ioloop.IOLoop = None):
+        """Periodic update of overall app state
+
+        Checks for new lives, prunes old ones and adds them to the archives, and refreshes groupers
+
+        Parameters
+        ----------
+        current_ioloop
+            The IOLoop to use for this process and when spawning monitor processes
+        """
         if current_ioloop is None:
             current_ioloop = tornado.ioloop.IOLoop.current()
 
@@ -52,7 +61,7 @@ class Supervisor:
                 report = monitor.report
                 report.finalize()
                 if len(report) > 0:
-                    self.archive_reports.append(report)
+                    self.archive_reports.insert(0, report)
         
         for video_id in to_delete:
             del self.live_monitors[video_id]
@@ -70,7 +79,7 @@ class Supervisor:
     def live_json(self) -> Dict:
         return {'reports': [monitor.report.json() for monitor in self.live_monitors.values()]}
     
-    @cached(TTLCache(1, 60))
+    @cached(TTLCache(1, 30))
     def archive_json(self) -> Dict:
         return {'reports': [report.json() for report in self.archive_reports]}
     
