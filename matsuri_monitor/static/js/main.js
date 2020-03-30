@@ -174,6 +174,9 @@ function ReportApp(props) {
     return reportLength > 0;
   });
 
+  // Display in reverse chronological order, with newest at top
+  reportsFiltered.reverse();
+
   return e(React.Fragment, null,
     reportsFiltered.length > 0
     ? reportsFiltered.map((info, i) =>  e(LiveReport, {key: i, info: info}))
