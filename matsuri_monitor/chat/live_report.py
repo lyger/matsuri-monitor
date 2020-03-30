@@ -25,6 +25,7 @@ class LiveReport:
         self.info = info
         self.group_lock = mp.Lock()
         self.group_lists: List[GroupList] = []
+        self.message_lock = mp.Lock()
         self.messages: List[Message] = []
         self.__finalized = False
 
@@ -44,11 +45,12 @@ class LiveReport:
         if self.__finalized:
             raise RuntimeError('Cannot modify a finalized LiveReport')
 
-        self.messages.extend(messages)
+        with self.message_lock:
+            self.messages.extend(messages)
 
-        # Sort and deduplicate
-        self.messages.sort(key=lambda msg: msg.timestamp)
-        self.messages = [dup[0] for dup in groupby(self.messages)]
+            # Sort and deduplicate
+            self.messages.sort(key=lambda msg: msg.timestamp)
+            self.messages = [dup[0] for dup in groupby(self.messages)]
 
         with self.group_lock:
             for group_list in self.group_lists:
@@ -57,7 +59,8 @@ class LiveReport:
     def finalize(self):
         """Clean up and freeze state of report once live ends"""
         # Drop message buffer to save memory; we only keep the groups
-        self.messages.clear()
+        with self.message_lock:
+            self.messages.clear()
 
         # Drop group lists with no groups in them
         with self.group_lock:
@@ -106,4 +109,5 @@ class LiveReport:
 
     def __len__(self):
         """The total number of groups in this report, across all lists"""
-        return sum(map(len, self.group_lists))
+        with self.group_lock:
+            return sum(map(len, self.group_lists))
