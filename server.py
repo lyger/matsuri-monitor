@@ -14,6 +14,7 @@ tornado.options.define('interval', default=300, type=float, help='Seconds betwee
 
 
 def main():
+    """Create app and start server"""
     supervisor = Supervisor(tornado.options.options.interval)
 
     static_path = Path(__file__).parent.absolute() / 'matsuri_monitor' / 'static'

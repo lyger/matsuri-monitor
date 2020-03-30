@@ -1,24 +1,36 @@
+import json
 from collections import OrderedDict
 from datetime import datetime, timedelta
+from pathlib import Path
 from typing import Dict, List
 
 import tornado.ioloop
+import tornado.options
 from cachetools import TTLCache, cached
 
 from matsuri_monitor import chat, clients
 
-HISTORY_CUTOFF = timedelta(days=7).total_seconds()
+tornado.options.define('history-days', default=7, type=int, help='Number of days of history to save')
+tornado.options.define('archives-dir', default=Path('archives'), type=Path, help='Path to save archive JSONs')
 
 
 class Supervisor:
 
     def __init__(self, interval: float):
+        """init
+
+        Parameters
+        ----------
+        interval
+            Update interval in seconds
+        """
         super().__init__()
         self.interval = interval
         self.jetri = clients.Jetri()
         self.live_monitors: Dict[str, Monitor] = OrderedDict()
         self.archive_reports: List[chat.LiveReport] = []
         self.groupers = chat.Grouper.load()
+        tornado.options.options.archives_dir.mkdir(exist_ok=True)
 
     def update(self, current_ioloop: tornado.ioloop.IOLoop = None):
         """Periodic update of overall app state
@@ -62,28 +74,38 @@ class Supervisor:
                 report.finalize()
                 if len(report) > 0:
                     self.archive_reports.insert(0, report)
-        
+                    report_fname = (
+                        f'{datetime.fromtimestamp(report.info.start_timestamp).isoformat()}_'
+                        f'{report.info.id}.json'
+                    )
+                    report_path = tornado.options.options.archives_dir / report_fname
+                    json.dump(report.json(), report_path.open('w'))
+
         for video_id in to_delete:
             del self.live_monitors[video_id]
 
         self.prune()
 
     def prune(self):
+        """Remove old reports"""
         timestamp_now = datetime.utcnow().timestamp()
-        cutoff = timestamp_now - HISTORY_CUTOFF
+        cutoff = timestamp_now - timedelta(days=tornado.options.options.history_days).total_seconds()
         pruned_reports = list(filter(lambda r: r.info.start_timestamp > cutoff, self.archive_reports))
 
         self.archive_reports = pruned_reports
 
     @cached(TTLCache(1, 5))
-    def live_json(self) -> Dict:
+    def live_json(self) -> dict:
+        """JSON object containing reports of all currently live streams"""
         return {'reports': [monitor.report.json() for monitor in self.live_monitors.values()]}
-    
+
     @cached(TTLCache(1, 30))
-    def archive_json(self) -> Dict:
+    def archive_json(self) -> dict:
+        """JSON object containing reports of all archived live streams"""
         return {'reports': [report.json() for report in self.archive_reports]}
-    
+
     def get_scheduler(self) -> tornado.ioloop.PeriodicCallback:
+        """Get scheduler that periodically updates the app state"""
         def update_async():
             current_ioloop = tornado.ioloop.IOLoop.current()
             current_ioloop.run_in_executor(None, self.update, current_ioloop)

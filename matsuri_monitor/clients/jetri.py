@@ -36,7 +36,7 @@ class Jetri:
     def currently_live(self):
         """Returns IDs of currently live streams"""
         return self.lives[self.lives['type'] == 'live'].index.tolist()
-    
+
     def get_channel_info(self, channel_id: str):
         """Returns a ChannelInfo object for the given channel ID"""
         return chat.ChannelInfo(

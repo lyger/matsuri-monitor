@@ -12,10 +12,7 @@ from bs4 import BeautifulSoup
 
 from matsuri_monitor import chat
 
-INFERRED_UTCOFFSET = datetime.now().astimezone().tzinfo.utcoffset(None).seconds // 3600
-
 tornado.options.define('api-key', type=str, help='YouTube API key')
-tornado.options.define('utcoffset', default=INFERRED_UTCOFFSET, type=int, help='Offset in hours from UTC')
 
 logger = logging.getLogger('tornado.general')
 
@@ -39,6 +36,7 @@ INIT_RETRIES = 5
 UPDATE_INTERVAL = 1
 
 def has_path(d, path):
+    """Check if a dot-separated path is in the given nested dict/list"""
     for k in path.split('.'):
         if k.isdigit():
             k = int(k)
@@ -50,7 +48,9 @@ def has_path(d, path):
         d = d[k]
     return True
 
+
 def traverse(d, path):
+    """Return the value at the given path from the given nested dict/list"""
     for k in path.split('.'):
         if k.isdigit():
             k = int(k)
@@ -62,7 +62,7 @@ class Monitor:
 
     def __init__(self, info: chat.VideoInfo, report: chat.LiveReport):
         """init
-        
+
         Parameters
         ----------
         info
@@ -74,7 +74,6 @@ class Monitor:
         self.info = info
         self.report = report
         self._running = False
-        self.utcoffset_seconds = tornado.options.options.utcoffset * 3600
 
     @property
     def is_running(self):
@@ -108,7 +107,7 @@ class Monitor:
         for script in soup.find_all('script'):
             if 'ytInitialData' in script.text:
                 break
-        
+
         initial_data_str = script.text.split('=', 1)[-1].strip().strip(';')
 
         return json.loads(initial_data_str)
@@ -123,7 +122,7 @@ class Monitor:
             if 'continuation' in data:
                 continuation = data['continuation']
                 break
-        
+
         if not continuation:
             raise KeyError('No continuation token found')
 
@@ -157,7 +156,8 @@ class Monitor:
             except Exception as e:
                 if retry == INIT_RETRIES - 1:
                     logger.exception(f'Failed to initialize in monitor for video_id={self.info.id}')
-                    raise e
+                    return
+
                 continue
 
         while True:
@@ -187,7 +187,7 @@ class Monitor:
                     new_messages.append(message)
 
                 self.report.add_messages(new_messages)
-            
+
             time.sleep(UPDATE_INTERVAL)
 
             try:

@@ -11,7 +11,6 @@
         "type": "username",
         "value": "Matsuri Channel 夏色まつり",
         "interval": 5,
-        "min_len": 1,
         "notify": true
     }
 ]

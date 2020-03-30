@@ -11,7 +11,7 @@ import tornado.options
 
 from matsuri_monitor.chat.message import Message
 
-tornado.options.define('grouper-file', type=Path, default=Path('groupers.json'), help='Path to grouper definitions json file')
+tornado.options.define('grouper-file', default=Path('groupers.json'), type=Path, help='Path to grouper definitions json file')
 
 GROUPER_SCHEMA = {
     'type': 'array',
@@ -34,6 +34,7 @@ GROUPER_SCHEMA = {
 
 
 def _regex_condition(value: str) -> Callable[[Message], bool]:
+    """Creates a condition that is true when message text matches the given regex"""
     exp = re.compile(value)
 
     def condition(message: Message):
@@ -43,6 +44,7 @@ def _regex_condition(value: str) -> Callable[[Message], bool]:
 
 
 def _username_condition(value: str) -> Callable[[Message], bool]:
+    """Creates a condition that is true when the message is by the given author"""
     def condition(message: Message):
         return message.author == value
 
@@ -51,6 +53,7 @@ def _username_condition(value: str) -> Callable[[Message], bool]:
 
 @dataclass
 class Grouper:
+    """Defines a grouper used to group chat messages for a report"""
     condition: Callable
     description: str
     interval: float
@@ -60,6 +63,7 @@ class Grouper:
 
     @classmethod
     def load(cls) -> List[Grouper]:
+        """Load and return groupers defined in the passed JSON file"""
         grouper_defs = json.load(tornado.options.options.grouper_file.open())
 
         jsonschema.validate(grouper_defs, GROUPER_SCHEMA)

@@ -7,6 +7,13 @@ from matsuri_monitor.chat.message import Message
 class GroupList:
 
     def __init__(self, grouper: Grouper):
+        """init
+
+        Parameters
+        ----------
+        grouper
+            Grouper used to define this group list
+        """
         self.groups = []
         self.grouper = grouper
         self.description = grouper.description
@@ -14,6 +21,7 @@ class GroupList:
         self.last_timestamp = -float('inf')
 
     def update(self, messages: List[Message]):
+        """Recompute groups from the given list of Messages"""
         self.groups = []
         for message in messages:
             if self.grouper.condition(message):
@@ -22,21 +30,21 @@ class GroupList:
                     self.add_to_last_group(message)
                 else:
                     self.add_to_new_group(message)
-        
-        self.prune()
-    
+
+        self.groups = list(filter(lambda g: len(g) >= self.grouper.min_len, self.groups))
+
     def add_to_new_group(self, message: Message):
+        """Add message to a new group"""
         self.groups.append([message])
         self.last_timestamp = message.timestamp
-    
+
     def add_to_last_group(self, message: Message):
+        """Add message to current last group"""
         if len(self.groups) == 0:
             return self.add_to_new_group(message)
         self.groups[-1].append(message)
         self.last_timestamp = message.timestamp
 
-    def prune(self):
-        self.groups = list(filter(lambda g: len(g) >= self.grouper.min_len, self.groups))
-
     def __len__(self):
+        """Number of groups in this list"""
         return len(self.groups)

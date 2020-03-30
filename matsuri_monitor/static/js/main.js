@@ -105,14 +105,14 @@ function GroupList(props) {
 
   useEffect(() => {
     if (!props.info.notify || !notifEnabled()) return;
-  
+
     const groups = props.info.groups;
 
     let i = 0;
     while (i < groups.length && i < prevGroups.length && groups[i][0].timestamp === prevGroups[i][0].timestamp) i++;
 
     const utcNow = Date.now() / 1000;
-  
+
     groups.slice(i)
       .filter((group) => (utcNow - group[group.length - 1].timestamp) < NOTIF_CUTOFF)
       .forEach((group) => props.onNew(props.info.description, group));
@@ -209,7 +209,7 @@ if ('Notification' in window) {
       }
       if (callback !== null && callback !== undefined) callback();
     }
-  
+
     if(checkNotificationPromise()) {
       Notification.requestPermission()
       .then((permission) => {

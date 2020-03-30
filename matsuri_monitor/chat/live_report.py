@@ -13,8 +13,15 @@ from matsuri_monitor.chat.message import Message
 
 
 class LiveReport:
-    
+
     def __init__(self, info: VideoInfo):
+        """init
+
+        Parameters
+        ----------
+        info
+            VideoInfo describing the video to generate a report for
+        """
         self.info = info
         self.group_lock = mp.Lock()
         self.group_lists: List[GroupList] = []
@@ -46,7 +53,7 @@ class LiveReport:
         with self.group_lock:
             for group_list in self.group_lists:
                 group_list.update(self.messages)
-    
+
     def finalize(self):
         """Clean up and freeze state of report once live ends"""
         # Drop message buffer to save memory; we only keep the groups
@@ -64,7 +71,7 @@ class LiveReport:
         self.json = cached(LRUCache(1))(self.json)
         self.__finalized = True
 
-    def json(self):
+    def json(self) -> dict:
         """Return a JSON representation of this report"""
         with self.group_lock:
             ret = {
