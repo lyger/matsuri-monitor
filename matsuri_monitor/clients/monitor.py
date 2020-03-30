@@ -1,5 +1,6 @@
 import json
 import logging
+import multiprocessing as mp
 import queue
 import time
 from datetime import datetime, timezone
@@ -73,6 +74,7 @@ class Monitor:
         super().__init__()
         self.info = info
         self.report = report
+        self._terminate_flag = mp.Event()
         self._running = False
 
     @property
@@ -155,38 +157,47 @@ class Monitor:
 
             except Exception as e:
                 if retry == INIT_RETRIES - 1:
-                    logger.exception(f'Failed to initialize in monitor for video_id={self.info.id}')
+                    error_name = type(e).__name__
+                    logger.exception(f'Failed to initialize in monitor for video_id={self.info.id} ({error_name})')
+                    self._running = False
                     return
 
                 continue
 
         while True:
             if has_path(chat_obj, ACTIONS_PATH):
-                actions = traverse(chat_obj, ACTIONS_PATH)
+                try:
+                    actions = traverse(chat_obj, ACTIONS_PATH)
 
-                new_messages = []
+                    new_messages = []
 
-                for action in actions:
-                    if not all(
-                        has_path(action, pth)
-                        for pth in [AUTHOR_SUBPATH, TEXT_RUNS_SUBPATH, TIMESTAMP_SUPBATH]
-                    ):
-                        continue
+                    for action in actions:
+                        if not all(
+                            has_path(action, pth)
+                            for pth in [AUTHOR_SUBPATH, TEXT_RUNS_SUBPATH, TIMESTAMP_SUPBATH]
+                        ):
+                            continue
 
-                    author = traverse(action, AUTHOR_SUBPATH)
-                    text = ''.join(run.get('text', '') for run in traverse(action, TEXT_RUNS_SUBPATH))
-                    timestamp = float(traverse(action, TIMESTAMP_SUPBATH)) / 1_000_000
+                        author = traverse(action, AUTHOR_SUBPATH)
+                        text = ''.join(run.get('text', '') for run in traverse(action, TEXT_RUNS_SUBPATH))
+                        timestamp = float(traverse(action, TIMESTAMP_SUPBATH)) / 1_000_000
 
-                    message = chat.Message(
-                        author=author,
-                        text=text,
-                        timestamp=timestamp,
-                        relative_timestamp=timestamp - start_timestamp,
-                    )
+                        message = chat.Message(
+                            author=author,
+                            text=text,
+                            timestamp=timestamp,
+                            relative_timestamp=timestamp - start_timestamp,
+                        )
 
-                    new_messages.append(message)
+                        new_messages.append(message)
 
-                self.report.add_messages(new_messages)
+                    self.report.add_messages(new_messages)
+
+                except Exception as e:
+                    error_name = type(e).__name__
+                    logger.exception(f'Error while running monitor for video_id={self.info.id} ({error_name})')
+                    self._running = False
+                    return
 
             time.sleep(UPDATE_INTERVAL)
 
@@ -194,8 +205,10 @@ class Monitor:
                 continuation_obj = traverse(chat_obj, CONTINUATION_PATH)
                 chat_obj = self.get_next_chat(continuation_obj)
             except (KeyError, json.JSONDecodeError):
+                logger.info(f'Could not fetch more chat for video_id={self.info.id}')
                 break
 
+        self._terminate_flag.wait()
         self._running = False
 
     def start(self, current_ioloop: tornado.ioloop.IOLoop = None):
@@ -204,4 +217,11 @@ class Monitor:
         if current_ioloop is None:
             current_ioloop = tornado.ioloop.IOLoop.current()
         self._running = True
+
+        logger.info(f'Begin monitoring video_id={self.info.id}')
         current_ioloop.run_in_executor(None, self.run)
+
+    def terminate(self):
+        """Signal this process to terminate"""
+        logger.info(f'Received terminate signal for video_id={self.info.id}')
+        self._terminate_flag.set()

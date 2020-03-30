@@ -47,55 +47,71 @@ class Supervisor:
         if current_ioloop is None:
             current_ioloop = tornado.ioloop.IOLoop.current()
 
+        # Refresh groupers
         new_groupers = chat.Grouper.load()
         if new_groupers != self.groupers:
             for monitor in self.live_monitors.values():
                 monitor.report.set_groupers(new_groupers)
             self.groupers = new_groupers
 
-        self.jetri.update()
-        for video_id in self.jetri.currently_live:
-            if video_id not in self.live_monitors:
-                info = self.jetri.get_live_info(video_id)
-
-                report = chat.LiveReport(info)
-                report.set_groupers(self.groupers)
-
-                monitor = clients.Monitor(info, report)
-                monitor.start(current_ioloop)
-
-                self.live_monitors[video_id] = monitor
-
+        # Clean up terminated monitors (including those that terminated with an error)
         to_delete = []
 
         for video_id, monitor in self.live_monitors.items():
             if not monitor.is_running:
                 to_delete.append(video_id)
 
-                report = monitor.report
-
-                if len(report) > 0:
-                    report_datetime = datetime.fromtimestamp(report.info.start_timestamp).isoformat(timespec='seconds')
-                    report_basename = f'{report_datetime}_{report.info.id}'.replace(':', '')
-                    report_path = tornado.options.options.archives_dir / f'{report_basename}.json.gz'
-
-                    if tornado.options.options.dump_chat:
-                        messages_json = [msg.json() for msg in report.messages]
-                        messages_path = tornado.options.options.archives_dir / f'{report_basename}_chat.json.gz'
-
-                        with gzip.open(messages_path, 'wt') as dump_file:
-                            json.dump(messages_json, dump_file)
-
-                    report.finalize()
-
-                    with gzip.open(report_path, 'wt') as report_file:
-                        json.dump(report.json(), report_file)
-
-                    self.archive_reports.append(report)
-
         for video_id in to_delete:
             del self.live_monitors[video_id]
 
+        # Refresh currently live list and find lives to start and terminate
+        self.jetri.update()
+
+        currently_live = set(self.jetri.currently_live)
+        currently_monitored = set(self.live_monitors.keys())
+
+        new_lives = currently_live - currently_monitored
+        stopped_lives = currently_monitored - currently_live
+
+        # Start new lives
+        for video_id in new_lives:
+            info = self.jetri.get_live_info(video_id)
+
+            report = chat.LiveReport(info)
+            report.set_groupers(self.groupers)
+
+            monitor = clients.Monitor(info, report)
+            monitor.start(current_ioloop)
+
+            self.live_monitors[video_id] = monitor
+
+        # Send terminate signal to finished lives and archive their reports
+        for video_id in stopped_lives:
+            monitor = self.live_monitors[video_id]
+            monitor.terminate()
+
+            report = monitor.report
+
+            if len(report) > 0:
+                report_datetime = datetime.fromtimestamp(report.info.start_timestamp).isoformat(timespec='seconds')
+                report_basename = f'{report_datetime}_{report.info.id}'.replace(':', '')
+                report_path = tornado.options.options.archives_dir / f'{report_basename}.json.gz'
+
+                if tornado.options.options.dump_chat:
+                    messages_json = [msg.json() for msg in report.messages]
+                    messages_path = tornado.options.options.archives_dir / f'{report_basename}_chat.json.gz'
+
+                    with gzip.open(messages_path, 'wt') as dump_file:
+                        json.dump(messages_json, dump_file)
+
+                report.finalize()
+
+                with gzip.open(report_path, 'wt') as report_file:
+                    json.dump(report.json(), report_file)
+
+                self.archive_reports.append(report)
+
+        # Remove old reports from memory
         self.prune()
 
     def prune(self):
