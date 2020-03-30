@@ -34,11 +34,14 @@ class LiveReport:
         if self.__finalized:
             raise RuntimeError('Cannot modify a finalized LiveReport')
 
+        with self.message_lock:
+            messages = self.messages
+
         include = lambda g: self.info.channel.id not in g.skip_channels
         with self.group_lock:
             self.group_lists = list(map(GroupList, filter(include, groupers)))
-
-        self.add_messages([])
+            for group_list in self.group_lists:
+                group_list.update(messages)
 
     def add_messages(self, messages: List[Message]):
         """Add new messages and recompute groups from them"""
@@ -51,10 +54,11 @@ class LiveReport:
             # Sort and deduplicate
             self.messages.sort(key=lambda msg: msg.timestamp)
             self.messages = [dup[0] for dup in groupby(self.messages)]
+            messages = self.messages
 
         with self.group_lock:
             for group_list in self.group_lists:
-                group_list.update(self.messages)
+                group_list.update(messages)
 
     def finalize(self):
         """Clean up and freeze state of report once live ends"""
