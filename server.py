@@ -41,9 +41,12 @@ def main():
         server.bind(tornado.options.options.port)
         server.start(1)
 
+    current_ioloop = tornado.ioloop.IOLoop.current()
+
     supervisor.update()
-    supervisor.get_scheduler().start()
-    tornado.ioloop.IOLoop.current().start()
+    supervisor.get_scheduler(current_ioloop).start()
+
+    current_ioloop.start()
 
 
 if __name__ == '__main__':

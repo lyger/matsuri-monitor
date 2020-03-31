@@ -1,3 +1,4 @@
+import logging
 from collections import OrderedDict
 from datetime import datetime, timedelta
 from typing import Dict, List
@@ -9,6 +10,8 @@ from cachetools import TTLCache, cached
 from matsuri_monitor import chat, clients
 
 tornado.options.define('history-days', default=7, type=int, help='Number of days of history to save')
+
+logger = logging.getLogger('tornado.general')
 
 
 class Supervisor:
@@ -42,6 +45,8 @@ class Supervisor:
         if current_ioloop is None:
             current_ioloop = tornado.ioloop.IOLoop.current()
 
+        logger.info('[Begin supervisor update]')
+
         # Refresh groupers
         new_groupers = chat.Grouper.load()
         if new_groupers != self.groupers:
@@ -58,6 +63,8 @@ class Supervisor:
 
         for video_id in to_delete:
             del self.live_monitors[video_id]
+
+        logger.info('Removed stopped monitors')
 
         # Refresh currently live list and find lives to start and terminate
         self.jetri.update()
@@ -80,6 +87,8 @@ class Supervisor:
 
             self.live_monitors[video_id] = monitor
 
+        logger.info(f'Started {len(new_lives)} new monitors')
+
         # Send terminate signal to finished lives and move reports to archives
         for video_id in stopped_lives:
             monitor = self.live_monitors[video_id]
@@ -90,9 +99,13 @@ class Supervisor:
             if len(report) > 0:
                 self.archive_reports.append(report)
 
+        logger.info(f'Terminated {len(stopped_lives)} monitors')
+
         # Remove old reports from memory
         self.prune()
 
+        logger.info('[End supervisor update]')
+    
     def prune(self):
         """Remove old reports"""
         timestamp_now = datetime.utcnow().timestamp()
@@ -111,10 +124,9 @@ class Supervisor:
         """JSON object containing reports of all archived live streams"""
         return {'reports': [report.json() for report in self.archive_reports]}
 
-    def get_scheduler(self) -> tornado.ioloop.PeriodicCallback:
+    def get_scheduler(self, current_ioloop: tornado.ioloop.IOLoop) -> tornado.ioloop.PeriodicCallback:
         """Get scheduler that periodically updates the app state"""
         def update_async():
-            current_ioloop = tornado.ioloop.IOLoop.current()
             current_ioloop.run_in_executor(None, self.update, current_ioloop)
 
         return tornado.ioloop.PeriodicCallback(update_async, self.interval * 1000)
