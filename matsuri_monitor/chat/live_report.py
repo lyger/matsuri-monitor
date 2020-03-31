@@ -40,7 +40,7 @@ class LiveReport:
     def set_groupers(self, groupers: List[Grouper]):
         """Set the groupers used to generate this report"""
         if self.__finalized:
-            raise RuntimeError('Cannot modify a finalized LiveReport')
+            return
 
         with self.message_lock:
             messages = self.messages

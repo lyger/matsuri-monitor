@@ -214,6 +214,8 @@ class Monitor:
         self.report.save_and_finalize()
         self._stopped_flag.set()
 
+        logger.info(f'Monitor finished for video_id={self.info.id}')
+
     def start(self, current_ioloop: tornado.ioloop.IOLoop = None):
         """Spawn monitor process in executor on the current IOLoop"""
 
