@@ -61,10 +61,10 @@ class Supervisor:
             if not monitor.is_running:
                 to_delete.append(video_id)
 
+        logger.info(f'Removing {len(to_delete)} stopped monitors')
+
         for video_id in to_delete:
             del self.live_monitors[video_id]
-
-        logger.info('Removed stopped monitors')
 
         # Refresh currently live list and find lives to start and terminate
         self.jetri.update()
