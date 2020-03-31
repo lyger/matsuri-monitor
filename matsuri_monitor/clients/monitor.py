@@ -75,11 +75,11 @@ class Monitor:
         self.info = info
         self.report = report
         self._terminate_flag = mp.Event()
-        self._running = False
+        self._stopped_flag = mp.Event()
 
     @property
     def is_running(self):
-        return self._running
+        return not self._stopped_flag.is_set()
 
     def get_live_details(self):
         """Get live details of the live this monitor is monitoring"""
@@ -159,7 +159,7 @@ class Monitor:
                 if retry == INIT_RETRIES - 1:
                     error_name = type(e).__name__
                     logger.exception(f'Failed to initialize in monitor for video_id={self.info.id} ({error_name})')
-                    self._running = False
+                    self._stopped_flag.set()
                     return
 
                 continue
@@ -196,7 +196,7 @@ class Monitor:
                 except Exception as e:
                     error_name = type(e).__name__
                     logger.exception(f'Error while running monitor for video_id={self.info.id} ({error_name})')
-                    self._running = False
+                    self._stopped_flag.set()
                     return
 
             time.sleep(UPDATE_INTERVAL)
@@ -209,7 +209,10 @@ class Monitor:
                 break
 
         self._terminate_flag.wait()
-        self._running = False
+
+        logger.info(f'Serializing report for video_id={self.info.id}')
+        self.report.save_and_finalize()
+        self._stopped_flag.set()
 
     def start(self, current_ioloop: tornado.ioloop.IOLoop = None):
         """Spawn monitor process in executor on the current IOLoop"""

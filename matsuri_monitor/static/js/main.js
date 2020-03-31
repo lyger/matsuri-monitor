@@ -1,5 +1,5 @@
-function notifEnabled() {
-  return (Notification.permission === 'granted');
+let notifEnabled = () => {
+  return false;
 }
 
 function format_seconds(s) {
@@ -194,6 +194,10 @@ ReactDOM.render(e(ReportApp, {endpoint: '/_monitor/archive.json', interval: 3000
  *****************/
 
 if ('Notification' in window) {
+  notifEnabled = () => {
+    return (Notification.permission === 'granted');
+  }
+
   function checkNotificationPromise() {
     try {
       Notification.requestPermission().then();

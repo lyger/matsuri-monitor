@@ -1,8 +1,5 @@
-import gzip
-import json
 from collections import OrderedDict
 from datetime import datetime, timedelta
-from pathlib import Path
 from typing import Dict, List
 
 import tornado.ioloop
@@ -12,8 +9,6 @@ from cachetools import TTLCache, cached
 from matsuri_monitor import chat, clients
 
 tornado.options.define('history-days', default=7, type=int, help='Number of days of history to save')
-tornado.options.define('archives-dir', default=Path('archives'), type=Path, help='Path to save archive JSONs')
-tornado.options.define('dump-chat', default=False, type=bool, help='Also dump all stream comments to archive dir')
 
 
 class Supervisor:
@@ -85,7 +80,7 @@ class Supervisor:
 
             self.live_monitors[video_id] = monitor
 
-        # Send terminate signal to finished lives and archive their reports
+        # Send terminate signal to finished lives and move reports to archives
         for video_id in stopped_lives:
             monitor = self.live_monitors[video_id]
             monitor.terminate()
@@ -93,22 +88,6 @@ class Supervisor:
             report = monitor.report
 
             if len(report) > 0:
-                report_datetime = datetime.fromtimestamp(report.info.start_timestamp).isoformat(timespec='seconds')
-                report_basename = f'{report_datetime}_{report.info.id}'.replace(':', '')
-                report_path = tornado.options.options.archives_dir / f'{report_basename}.json.gz'
-
-                if tornado.options.options.dump_chat:
-                    messages_json = [msg.json() for msg in report.messages]
-                    messages_path = tornado.options.options.archives_dir / f'{report_basename}_chat.json.gz'
-
-                    with gzip.open(messages_path, 'wt') as dump_file:
-                        json.dump(messages_json, dump_file)
-
-                report.finalize()
-
-                with gzip.open(report_path, 'wt') as report_file:
-                    json.dump(report.json(), report_file)
-
                 self.archive_reports.append(report)
 
         # Remove old reports from memory

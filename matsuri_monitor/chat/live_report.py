@@ -1,15 +1,23 @@
+import gzip
+import json
 import multiprocessing as mp
 from collections import OrderedDict
 from dataclasses import dataclass
+from datetime import datetime
 from itertools import groupby
+from pathlib import Path
 from typing import Callable, List
 
 from cachetools import LRUCache, cached
+import tornado.options
 
 from matsuri_monitor.chat.group_list import GroupList
 from matsuri_monitor.chat.grouper import Grouper
 from matsuri_monitor.chat.info import VideoInfo
 from matsuri_monitor.chat.message import Message
+
+tornado.options.define('archives-dir', default=Path('archives'), type=Path, help='Path to save archive JSONs')
+tornado.options.define('dump-chat', default=False, type=bool, help='Also dump all stream comments to archive dir')
 
 
 class LiveReport:
@@ -77,6 +85,27 @@ class LiveReport:
         # Permanently cache the JSON representation
         self.json = cached(LRUCache(1))(self.json)
         self.__finalized = True
+
+    def save_and_finalize(self):
+        """Save report to archives directory and finalize"""
+        report_datetime = datetime.fromtimestamp(self.info.start_timestamp).isoformat(timespec='seconds')
+        report_basename = f'{report_datetime}_{self.info.id}'.replace(':', '')
+        report_path = tornado.options.options.archives_dir / f'{report_basename}.json.gz'
+
+        if tornado.options.options.dump_chat:
+            messages_json = [msg.json() for msg in self.messages]
+            messages_path = tornado.options.options.archives_dir / f'{report_basename}_chat.json.gz'
+
+            with gzip.open(messages_path, 'wt') as dump_file:
+                json.dump(messages_json, dump_file)
+
+        self.finalize()
+
+        if len(self) == 0:
+            return
+
+        with gzip.open(report_path, 'wt') as report_file:
+            json.dump(self.json(), report_file)
 
     def json(self) -> dict:
         """Return a JSON representation of this report"""
