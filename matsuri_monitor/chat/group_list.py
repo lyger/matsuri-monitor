@@ -42,6 +42,8 @@ class GroupList:
         """Add message to current last group"""
         if len(self.groups) == 0:
             return self.add_to_new_group(message)
+        if self.grouper.unique_author and any(message.author == other.author for other in self.groups[-1]):
+            return
         self.groups[-1].append(message)
         self.last_timestamp = message.timestamp
 

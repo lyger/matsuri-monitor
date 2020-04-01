@@ -23,6 +23,7 @@ GROUPER_SCHEMA = {
             'interval': {'type': 'number'},
             'min_len': {'type': 'number'},
             'notify': {'type': 'boolean'},
+            'unique_author': {'type': 'boolean'},
             'skip_channels': {
                 'type': 'array',
                 'items': {'type': 'string'},
@@ -59,6 +60,7 @@ class Grouper:
     interval: float
     min_len: int
     notify: bool
+    unique_author: bool
     skip_channels: List[str]
 
     @classmethod
@@ -84,6 +86,7 @@ class Grouper:
                 interval=gdef['interval'],
                 min_len=gdef.get('min_len', 1),
                 notify=gdef.get('notify', False),
+                unique_author=gdef.get('unique_author', False),
                 skip_channels=gdef.get('skip_channels', []),
             ))
 

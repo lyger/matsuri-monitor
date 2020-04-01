@@ -51,9 +51,6 @@ td:nth-child(1) {
 td:nth-child(2) {
   width: 80%;
   min-width: 80%;
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
 }
 
 .tag.is-medium {
