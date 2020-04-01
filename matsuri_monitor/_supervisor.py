@@ -3,6 +3,7 @@ from collections import OrderedDict
 from datetime import datetime, timedelta
 from typing import Dict, List
 
+import tornado.gen
 import tornado.ioloop
 import tornado.options
 from cachetools import TTLCache, cached
@@ -32,7 +33,7 @@ class Supervisor:
         self.groupers = chat.Grouper.load()
         tornado.options.options.archives_dir.mkdir(exist_ok=True)
 
-    def update(self, current_ioloop: tornado.ioloop.IOLoop = None):
+    async def update(self, current_ioloop: tornado.ioloop.IOLoop = None):
         """Periodic update of overall app state
 
         Checks for new lives, prunes old ones and adds them to the archives, and refreshes groupers
@@ -124,9 +125,11 @@ class Supervisor:
         """JSON object containing reports of all archived live streams"""
         return {'reports': [report.json() for report in self.archive_reports]}
 
-    def get_scheduler(self, current_ioloop: tornado.ioloop.IOLoop) -> tornado.ioloop.PeriodicCallback:
-        """Get scheduler that periodically updates the app state"""
-        def update_async():
-            current_ioloop.run_in_executor(None, self.update, current_ioloop)
+    def start(self, current_ioloop: tornado.ioloop.IOLoop):
+        """Begin update loop"""
+        async def update_loop():
+            while True:
+                await self.update(current_ioloop)
+                await tornado.gen.sleep(self.interval)
 
-        return tornado.ioloop.PeriodicCallback(update_async, self.interval * 1000)
+        current_ioloop.add_callback(update_loop)

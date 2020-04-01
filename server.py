@@ -43,8 +43,7 @@ def main():
 
     current_ioloop = tornado.ioloop.IOLoop.current()
 
-    supervisor.update()
-    supervisor.get_scheduler(current_ioloop).start()
+    supervisor.start(current_ioloop)
 
     current_ioloop.start()
 
