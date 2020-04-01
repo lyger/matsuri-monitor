@@ -1,3 +1,4 @@
+import functools
 import json
 import logging
 import multiprocessing as mp
@@ -6,7 +7,8 @@ import time
 from datetime import datetime, timezone
 from urllib.parse import parse_qs, urlparse
 
-import requests
+import aiohttp
+import tornado.gen
 import tornado.ioloop
 import tornado.options
 from bs4 import BeautifulSoup
@@ -59,6 +61,16 @@ def traverse(d, path):
     return d
 
 
+def http_session_method(f):
+    """Decorator for a method that uses an async http session"""
+    @functools.wraps(f)
+    async def wrapper(self, *args, **kwargs):
+        async with aiohttp.ClientSession() as session:
+            return await f(self, session, *args, **kwargs)
+    
+    return wrapper
+
+
 class Monitor:
 
     def __init__(self, info: chat.VideoInfo, report: chat.LiveReport):
@@ -71,7 +83,6 @@ class Monitor:
         report
             LiveReport to write chat messages to
         """
-        super().__init__()
         self.info = info
         self.report = report
         self._terminate_flag = mp.Event()
@@ -81,7 +92,7 @@ class Monitor:
     def is_running(self):
         return not self._stopped_flag.is_set()
 
-    def get_live_details(self):
+    async def get_live_details(self, session: aiohttp.ClientSession):
         """Get live details of the live this monitor is monitoring"""
 
         params = {
@@ -90,21 +101,21 @@ class Monitor:
             'key': tornado.options.options.api_key,
         }
 
-        resp = requests.get(VIDEO_API_ENDPOINT, params=params)
-
-        items = resp.json()['items']
+        async with session.get(VIDEO_API_ENDPOINT, params=params) as resp:
+            items = (await resp.json())['items']
 
         if len(items) < 1:
             raise RuntimeError('Could not get live broadcast info')
 
         return items[0]['liveStreamingDetails']
 
-    def get_initial_chat(self, continuation: str) -> dict:
+    async def get_initial_chat(self, session: aiohttp.ClientSession, continuation: str) -> dict:
         """Get initial chat JSON object from a continuation token"""
 
         endpoint = INITIAL_CHAT_ENDPOINT_TEMPLATE.format(continuation=continuation)
 
-        soup = BeautifulSoup(requests.get(endpoint, headers=REQUEST_HEADERS).text, features='lxml')
+        async with session.get(endpoint, headers=REQUEST_HEADERS) as resp:
+            soup = BeautifulSoup(await resp.text(), features='lxml')
 
         for script in soup.find_all('script'):
             if 'ytInitialData' in script.text:
@@ -114,7 +125,7 @@ class Monitor:
 
         return json.loads(initial_data_str)
 
-    def get_next_chat(self, continuation_obj: dict) -> dict:
+    async def get_next_chat(self, session: aiohttp.ClientSession, continuation_obj: dict) -> dict:
         """Get next chat JSON object from the previous object's continuation object"""
 
         continuation = None
@@ -130,14 +141,14 @@ class Monitor:
 
         endpoint = CHAT_ENDPOINT_TEMPLATE.format(continuation=continuation)
 
-        resp = requests.get(endpoint, headers=REQUEST_HEADERS)
+        async with session.get(endpoint, headers=REQUEST_HEADERS) as resp:
+            return (await resp.json())['response']
 
-        return resp.json()['response']
-
-    def run(self):
+    @http_session_method
+    async def run(self, session: aiohttp.ClientSession):
         """Monitor process"""
 
-        live_info = self.get_live_details()
+        live_info = await self.get_live_details(session)
 
         start_timestamp = datetime.fromisoformat(
             live_info['actualStartTime'].rstrip('zZ')
@@ -147,12 +158,14 @@ class Monitor:
 
         for retry in range(INIT_RETRIES):
             try:
-                soup = BeautifulSoup(requests.get(self.info.url).text, features='lxml')
+                async with session.get(self.info.url) as resp:
+                    soup = BeautifulSoup(await resp.text(), features='lxml')
+
                 chat_url = soup.find(id='live-chat-iframe').attrs['src']
 
                 continuation = parse_qs(urlparse(chat_url).query)['continuation'][0]
 
-                chat_obj = self.get_initial_chat(continuation)
+                chat_obj = await self.get_initial_chat(session, continuation)
                 break
 
             except Exception as e:
@@ -199,11 +212,11 @@ class Monitor:
                     self._stopped_flag.set()
                     return
 
-            time.sleep(UPDATE_INTERVAL)
+            await tornado.gen.sleep(UPDATE_INTERVAL)
 
             try:
                 continuation_obj = traverse(chat_obj, CONTINUATION_PATH)
-                chat_obj = self.get_next_chat(continuation_obj)
+                chat_obj = await self.get_next_chat(session, continuation_obj)
             except (KeyError, json.JSONDecodeError):
                 logger.info(f'Could not fetch more chat for video_id={self.info.id}')
                 break
@@ -224,7 +237,7 @@ class Monitor:
         self._running = True
 
         logger.info(f'Begin monitoring video_id={self.info.id}')
-        current_ioloop.run_in_executor(None, self.run)
+        current_ioloop.add_callback(self.run)
 
     def terminate(self):
         """Signal this process to terminate"""
