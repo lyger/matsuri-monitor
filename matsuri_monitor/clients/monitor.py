@@ -1,7 +1,7 @@
+import asyncio
 import functools
 import json
 import logging
-import threading
 import time
 from datetime import datetime, timezone
 from urllib.parse import parse_qs, urlparse
@@ -84,8 +84,8 @@ class Monitor:
         """
         self.info = info
         self.report = report
-        self._terminate_flag = threading.Event()
-        self._stopped_flag = threading.Event()
+        self._terminate_flag = asyncio.Event()
+        self._stopped_flag = asyncio.Event()
 
     @property
     def is_running(self):
@@ -220,7 +220,7 @@ class Monitor:
                 logger.info(f'Could not fetch more chat for video_id={self.info.id}')
                 break
 
-        self._terminate_flag.wait()
+        await self._terminate_flag.wait()
 
         logger.info(f'Serializing report for video_id={self.info.id}')
         self.report.save()
