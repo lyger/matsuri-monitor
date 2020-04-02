@@ -32,7 +32,7 @@ class ArchivesHandler(tornado.web.RequestHandler):
 
     def _archive_paths_since(self, since: str) -> List[Path]:
         condition = lambda p: p.name > since and '_chat' not in p.name and p.name.endswith('.json.gz')
-        return list(filter(condition, self.archives_dir.iterdir()))
+        return list(sorted(filter(condition, self.archives_dir.iterdir())))
 
     @cached(LRUCache(50))
     def _load_archive(self, apath: Path) -> dict:
