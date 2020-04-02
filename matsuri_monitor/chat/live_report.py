@@ -35,13 +35,9 @@ class LiveReport:
         self.group_lists: List[GroupList] = []
         self.message_lock = mp.Lock()
         self.messages: List[Message] = []
-        self.__finalized = False
 
     def set_groupers(self, groupers: List[Grouper]):
         """Set the groupers used to generate this report"""
-        if self.__finalized:
-            return
-
         with self.message_lock:
             messages = self.messages
 
@@ -51,13 +47,10 @@ class LiveReport:
             for group_list in self.group_lists:
                 group_list.update(messages)
 
-    def add_messages(self, messages: List[Message]):
+    def add_messages(self, new_messages: List[Message]):
         """Add new messages and recompute groups from them"""
-        if self.__finalized:
-            raise RuntimeError('Cannot modify a finalized LiveReport')
-
         with self.message_lock:
-            self.messages.extend(messages)
+            self.messages.extend(new_messages)
 
             # Sort and deduplicate
             self.messages.sort(key=lambda msg: msg.timestamp)
@@ -68,25 +61,7 @@ class LiveReport:
             for group_list in self.group_lists:
                 group_list.update(messages)
 
-    def finalize(self):
-        """Clean up and freeze state of report once live ends"""
-        # Drop message buffer to save memory; we only keep the groups
-        with self.message_lock:
-            self.messages.clear()
-
-        # Drop group lists with no groups in them
-        with self.group_lock:
-            self.group_lists = list(filter(lambda gl: len(gl) > 0, self.group_lists))
-
-        # Turn off notifications
-        for group_list in self.group_lists:
-            group_list.notify = False
-
-        # Permanently cache the JSON representation
-        self.json = cached(LRUCache(1))(self.json)
-        self.__finalized = True
-
-    def save_and_finalize(self):
+    def save(self):
         """Save report to archives directory and finalize"""
         report_datetime = datetime.fromtimestamp(self.info.start_timestamp).isoformat(timespec='seconds')
         report_basename = f'{report_datetime}_{self.info.id}'.replace(':', '')
@@ -98,8 +73,6 @@ class LiveReport:
 
             with gzip.open(messages_path, 'wt') as dump_file:
                 json.dump(messages_json, dump_file)
-
-        self.finalize()
 
         if len(self) == 0:
             return
@@ -134,7 +107,7 @@ class LiveReport:
                             for group in group_list.groups
                         ]
                     }
-                    for group_list in self.group_lists
+                    for group_list in filter(lambda gl: len(gl) > 0, self.group_lists)
                 ]
             }
 

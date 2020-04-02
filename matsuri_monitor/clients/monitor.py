@@ -224,7 +224,7 @@ class Monitor:
         self._terminate_flag.wait()
 
         logger.info(f'Serializing report for video_id={self.info.id}')
-        self.report.save_and_finalize()
+        self.report.save()
         self._stopped_flag.set()
 
         logger.info(f'Monitor finished for video_id={self.info.id}')

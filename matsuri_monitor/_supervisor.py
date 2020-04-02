@@ -29,7 +29,6 @@ class Supervisor:
         self.interval = interval
         self.jetri = clients.Jetri()
         self.live_monitors: Dict[str, Monitor] = OrderedDict()
-        self.archive_reports: List[chat.LiveReport] = []
         self.groupers = chat.Grouper.load()
         tornado.options.options.archives_dir.mkdir(exist_ok=True)
 
@@ -95,35 +94,14 @@ class Supervisor:
             monitor = self.live_monitors[video_id]
             monitor.terminate()
 
-            report = monitor.report
-
-            if len(report) > 0:
-                self.archive_reports.append(report)
-
         logger.info(f'Terminated {len(stopped_lives)} monitors')
 
-        # Remove old reports from memory
-        self.prune()
-
         logger.info('[End supervisor update]')
-    
-    def prune(self):
-        """Remove old reports"""
-        timestamp_now = datetime.utcnow().timestamp()
-        cutoff = timestamp_now - timedelta(days=tornado.options.options.history_days).total_seconds()
-        pruned_reports = list(filter(lambda r: r.info.start_timestamp > cutoff, self.archive_reports))
-
-        self.archive_reports = pruned_reports
 
     @cached(TTLCache(1, 5))
     def live_json(self) -> dict:
         """JSON object containing reports of all currently live streams"""
-        return {'reports': [monitor.report.json() for monitor in self.live_monitors.values()]}
-
-    @cached(TTLCache(1, 30))
-    def archive_json(self) -> dict:
-        """JSON object containing reports of all archived live streams"""
-        return {'reports': [report.json() for report in self.archive_reports]}
+        return {'reports': [monitor.report.json() for monitor in self.live_monitors.values() if monitor.is_running]}
 
     def start(self, current_ioloop: tornado.ioloop.IOLoop):
         """Begin update loop"""

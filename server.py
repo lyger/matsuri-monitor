@@ -27,7 +27,7 @@ def main():
             [
                 (r'/_monitor', handlers.MainHandler),
                 (r'/_monitor/live.json', handlers.APIHandler, {'json_source': supervisor.live_json}),
-                (r'/_monitor/archive.json', handlers.APIHandler, {'json_source': supervisor.archive_json}),
+                (r'/_monitor/archive.json', handlers.ArchivesHandler),
             ],
             debug=tornado.options.options.debug,
             static_path=static_path,
