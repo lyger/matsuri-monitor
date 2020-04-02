@@ -1,8 +1,7 @@
 import functools
 import json
 import logging
-import multiprocessing as mp
-import queue
+import threading
 import time
 from datetime import datetime, timezone
 from urllib.parse import parse_qs, urlparse
@@ -85,8 +84,8 @@ class Monitor:
         """
         self.info = info
         self.report = report
-        self._terminate_flag = mp.Event()
-        self._stopped_flag = mp.Event()
+        self._terminate_flag = threading.Event()
+        self._stopped_flag = threading.Event()
 
     @property
     def is_running(self):
