@@ -129,7 +129,11 @@ class Supervisor:
         """Begin update loop"""
         async def update_loop():
             while True:
-                await self.update(current_ioloop)
+                try:
+                    await self.update(current_ioloop)
+                except Exception as e:
+                    error_name = type(e).__name__
+                    logger.exception(f'Exception in supervisor update ({error_name})')
                 await tornado.gen.sleep(self.interval)
 
         current_ioloop.add_callback(update_loop)
