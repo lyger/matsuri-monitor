@@ -67,7 +67,7 @@ class Supervisor:
             del self.live_monitors[video_id]
 
         # Refresh currently live list and find lives to start and terminate
-        self.jetri.update()
+        await self.jetri.update()
 
         currently_live = set(self.jetri.currently_live)
         currently_monitored = set(self.live_monitors.keys())

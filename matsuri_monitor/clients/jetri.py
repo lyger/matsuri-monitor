@@ -1,9 +1,9 @@
 import multiprocessing as mp
 
+import aiohttp
 import pandas as pd
-import requests
 
-from matsuri_monitor import chat
+from matsuri_monitor import chat, util
 
 CHANNEL_ENDPOINT = 'https://storage.googleapis.com/vthell-data/channels.json'
 LIVE_ENDPOINT = 'https://storage.googleapis.com/vthell-data/live.json'
@@ -12,24 +12,32 @@ LIVE_ENDPOINT = 'https://storage.googleapis.com/vthell-data/live.json'
 class Jetri:
 
     def __init__(self):
-        channels = requests.get(CHANNEL_ENDPOINT).json()['channels']
         self._lock = mp.Lock()
-        self.channels = pd.DataFrame.from_records(channels, index='id')
         self.lives = pd.DataFrame(index=pd.Series(name='id'), columns=['title', 'type', 'startTime', 'channel'])
 
-    def update(self):
+    async def retrieve_channels(self, session: aiohttp.ClientSession):
+        async with session.get(CHANNEL_ENDPOINT) as resp:
+            channels = (await resp.json())['channels']
+        self.channels = pd.DataFrame.from_records(channels, index='id')
+
+    @util.http_session_method
+    async def update(self, session: aiohttp.ClientSession):
         """Re-accesses jetri endpoints and updates active lives"""
-        lives = requests.get(LIVE_ENDPOINT).json()
+        if not hasattr(self, 'channels'):
+            await self.retrieve_channels(session)
+
+        async with session.get(LIVE_ENDPOINT) as resp:
+            lives = await resp.json()
+
+        to_concat = []
+        for chid, records in lives.items():
+            channel_lives = pd.DataFrame.from_records(
+                records, index='id', columns=['id', 'title', 'type', 'startTime']
+            )
+            channel_lives['channel'] = chid
+            to_concat.append(channel_lives)
 
         with self._lock:
-            to_concat = []
-            for chid, records in lives.items():
-                channel_lives = pd.DataFrame.from_records(
-                    records, index='id', columns=['id', 'title', 'type', 'startTime']
-                )
-                channel_lives['channel'] = chid
-                to_concat.append(channel_lives)
-
             self.lives = pd.concat(to_concat)
 
     @property

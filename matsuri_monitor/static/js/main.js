@@ -27,7 +27,7 @@ function useInterval(callback, delay) {
 
   // Remember the latest callback.
   useEffect(() => {
-  savedCallback.current = callback;
+    savedCallback.current = callback;
   }, [callback]);
 
   // Set up the interval.
@@ -166,7 +166,7 @@ function ReportApp(props) {
       .then((data) => {setReports(data.reports)});
   }
 
-  useEffect(getReports, []);
+  useEffect(getReports, [props.endpoint]);
   useInterval(getReports, props.interval);
 
   const reportsFiltered = reports.filter((info) => {
@@ -186,8 +186,23 @@ function ReportApp(props) {
   )
 }
 
+function ArchiveWrapper(props) {
+  const [daysAgo, setDaysAgo] = useState(1);
+  const date = new Date();
+  date.setDate(date.getDate() - daysAgo)
+  const dateString = date.toISOString().slice(0, 10);
+  return e(React.Fragment, null,
+    e(ReportApp, {endpoint: `${props.endpoint}?start=${dateString}`, interval: props.interval}),
+    e('article', {className: 'media'},
+      e('div', {className: 'media-content has-text-centered'},
+        e('button', {className: 'button is-info', onClick: () => setDaysAgo(daysAgo + 1)}, 'More')
+      )
+    )  
+  )
+}
+
 ReactDOM.render(e(ReportApp, {endpoint: '/_monitor/live.json', interval: 5000}),  document.getElementById('live-root'));
-ReactDOM.render(e(ReportApp, {endpoint: '/_monitor/archive.json', interval: 30000}),  document.getElementById('archive-root'));
+ReactDOM.render(e(ArchiveWrapper, {endpoint: '/_monitor/archive.json', interval: 30000}),  document.getElementById('archive-root'));
 
 /*****************
  * NOTIFICATIONS *

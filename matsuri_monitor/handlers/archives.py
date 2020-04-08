@@ -31,7 +31,7 @@ class ArchivesHandler(tornado.web.RequestHandler):
             raise tornado.web.HTTPError(http.HTTPStatus.BAD_REQUEST, 'start parameter must be ISO date')
 
     def _archive_paths_since(self, since: str) -> List[Path]:
-        condition = lambda p: p.name > since and '_chat' not in p.name and p.name.endswith('.json.gz')
+        condition = lambda p: p.name.endswith('.json.gz') and '_chat' not in p.name and p.name > since
         return list(sorted(filter(condition, self.archives_dir.iterdir())))
 
     @cached(LRUCache(50))

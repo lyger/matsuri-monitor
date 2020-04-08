@@ -1,5 +1,4 @@
 import asyncio
-import functools
 import json
 import logging
 import time
@@ -12,7 +11,7 @@ import tornado.ioloop
 import tornado.options
 from bs4 import BeautifulSoup
 
-from matsuri_monitor import chat
+from matsuri_monitor import chat, util
 
 tornado.options.define('api-key', type=str, help='YouTube API key')
 
@@ -58,16 +57,6 @@ def traverse(d, path):
             k = int(k)
         d = d[k]
     return d
-
-
-def http_session_method(f):
-    """Decorator for a method that uses an async http session"""
-    @functools.wraps(f)
-    async def wrapper(self, *args, **kwargs):
-        async with aiohttp.ClientSession() as session:
-            return await f(self, session, *args, **kwargs)
-    
-    return wrapper
 
 
 class Monitor:
@@ -143,7 +132,7 @@ class Monitor:
         async with session.get(endpoint, headers=REQUEST_HEADERS) as resp:
             return (await resp.json())['response']
 
-    @http_session_method
+    @util.http_session_method
     async def run(self, session: aiohttp.ClientSession):
         """Monitor process"""
 
