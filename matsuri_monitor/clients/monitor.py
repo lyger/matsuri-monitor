@@ -144,6 +144,9 @@ class Monitor:
 
         self.info.start_timestamp = start_timestamp
 
+        termination_signals = 0
+        termination_cutoff = 10
+
         for retry in range(INIT_RETRIES):
             try:
                 async with session.get(self.info.url) as resp:
@@ -205,8 +208,26 @@ class Monitor:
             try:
                 continuation_obj = traverse(chat_obj, CONTINUATION_PATH)
                 chat_obj = await self.get_next_chat(session, continuation_obj)
+
+                # On at least one occasion, the monitor has gotten stuck and not terminated
+                # I'm not sure why, but this should ensure the monitor quits eventually
+                if self._terminate_flag.is_set():
+                    termination_signals += 1
+
+                if termination_signals >= termination_cutoff:
+                    logger.warning(
+                        f'Stopping monitor {termination_cutoff} iterations after termination '
+                        f'for video_id={self.info.id}'
+                    )
+                    break
+
             except (KeyError, json.JSONDecodeError):
                 logger.info(f'Could not fetch more chat for video_id={self.info.id}')
+                break
+
+            except Exception as e:
+                error_name = type(e).__name__
+                logger.exception(f'Error while fetching continuation for video_id={self.info.id} ({error_name})')
                 break
 
         await self._terminate_flag.wait()
