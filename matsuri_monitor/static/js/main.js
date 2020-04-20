@@ -122,7 +122,7 @@ function GroupList(props) {
 
   return e('nav', {className: 'panel'},
     e('p', {className: 'panel-heading'}, props.info.description),
-    props.info.groups.map((g, i) => e(Group, {key: i, group: g, video_url: props.video_url}))
+    props.info.groups.map((g, i) => e(Group, {key: `${i}:${g.length}`, group: g, video_url: props.video_url}))
   );
 }
 
@@ -151,7 +151,7 @@ function LiveReport(props) {
         e('h1', {className: 'title is-4', id: props.info.id},
           e('a', {href: props.info.url, target: '_blank'}, props.info.title)
         ),
-        props.info.group_lists.map((gl, i) => e(GroupList, {key: i, info: gl, video_url: props.info.url, onNew: notify}))
+        props.info.group_lists.map((gl) => e(GroupList, {key: gl.description, info: gl, video_url: props.info.url, onNew: notify}))
       )
     )
   );
@@ -179,7 +179,7 @@ function ReportApp(props) {
 
   return e(React.Fragment, null,
     reportsFiltered.length > 0
-    ? reportsFiltered.map((info, i) =>  e(LiveReport, {key: i, info: info}))
+    ? reportsFiltered.map((info) =>  e(LiveReport, {key: info.id, info: info}))
     : e('div', {className: 'notification'},
         e('p', {className: 'subtitle is-5 has-text-centered'}, 'Nothing yet')
       )
