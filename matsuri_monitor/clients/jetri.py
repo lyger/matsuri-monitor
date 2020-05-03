@@ -5,8 +5,8 @@ import pandas as pd
 
 from matsuri_monitor import chat, util
 
-CHANNEL_ENDPOINT = 'https://storage.googleapis.com/vthell-data/channels.json'
-LIVE_ENDPOINT = 'https://storage.googleapis.com/vthell-data/live.json'
+CHANNEL_ENDPOINT = 'https://api.jetri.co/channels'
+LIVE_ENDPOINT = 'https://api.jetri.co/live'
 
 
 class Jetri:
@@ -29,16 +29,12 @@ class Jetri:
         async with session.get(LIVE_ENDPOINT) as resp:
             lives = await resp.json()
 
-        to_concat = []
-        for chid, records in lives.items():
-            channel_lives = pd.DataFrame.from_records(
-                records, index='id', columns=['id', 'title', 'type', 'startTime']
-            )
-            channel_lives['channel'] = chid
-            to_concat.append(channel_lives)
+        lives_df = pd.DataFrame.from_records(
+            lives['live'], index='id', columns=['id', 'title', 'type', 'startTime', 'channel']
+        )
 
         with self._lock:
-            self.lives = pd.concat(to_concat)
+            self.lives = lives_df
 
     @property
     def currently_live(self):
