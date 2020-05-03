@@ -135,20 +135,19 @@ class Monitor:
     @util.http_session_method
     async def run(self, session: aiohttp.ClientSession):
         """Monitor process"""
-
-        live_info = await self.get_live_details(session)
-
-        start_timestamp = datetime.fromisoformat(
-            live_info['actualStartTime'].rstrip('zZ')
-        ).replace(tzinfo=timezone.utc).timestamp()
-
-        self.info.start_timestamp = start_timestamp
-
         termination_signals = 0
         termination_cutoff = 10
 
         for retry in range(INIT_RETRIES):
             try:
+                live_info = await self.get_live_details(session)
+
+                start_timestamp = datetime.fromisoformat(
+                    live_info['actualStartTime'].rstrip('zZ')
+                ).replace(tzinfo=timezone.utc).timestamp()
+
+                self.info.start_timestamp = start_timestamp
+
                 async with session.get(self.info.url) as resp:
                     soup = BeautifulSoup(await resp.text(), features='lxml')
 
