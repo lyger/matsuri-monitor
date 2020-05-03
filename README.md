@@ -14,7 +14,7 @@ You can (probably) deploy it yourself by doing this, replacing `$LOCAL_PORT` wit
 $ docker build -t matsuri-monitor .
 $ docker run -d \
     --name matsuri-monitor \
-    -p 128.0.0.1:8080:$LOCAL_PORT/tcp \
+    -p 127.0.0.1:$LOCAL_PORT:8080/tcp \
     --mount type=bind,target=/app/archives,source=$LOCAL_ARCHIVES_DIR \
     matsuri-monitor --api-key=$YOUTUBE_API_KEY
 ```
