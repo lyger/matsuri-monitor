@@ -19,19 +19,26 @@ logger = logging.getLogger('tornado.general')
 
 VIDEO_API_ENDPOINT = 'https://www.googleapis.com/youtube/v3/videos'
 
-INITIAL_CHAT_ENDPOINT_TEMPLATE = 'https://www.youtube.com/live_chat/get_live_chat?continuation={continuation}'
+INITIAL_CHAT_ENDPOINT_TEMPLATE = 'https://www.youtube.com/live_chat?v={video_id}'
 CHAT_ENDPOINT_TEMPLATE = 'https://www.youtube.com/live_chat/get_live_chat?continuation={continuation}&pbj=1'
 
 REQUEST_HEADERS = {
     'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/80.0.3987.149 Safari/537.36',
 }
 
+INITIAL_CONTINUATION_PATH = 'contents.liveChatRenderer.continuations.0'
+INITIAL_ACTIONS_PATH = 'contents.liveChatRenderer.actions'
+
 CONTINUATION_PATH = 'continuationContents.liveChatContinuation.continuations.0'
 ACTIONS_PATH = 'continuationContents.liveChatContinuation.actions'
 
-AUTHOR_SUBPATH = 'addChatItemAction.item.liveChatTextMessageRenderer.authorName.simpleText'
-TEXT_RUNS_SUBPATH = 'addChatItemAction.item.liveChatTextMessageRenderer.message.runs'
-TIMESTAMP_SUPBATH = 'addChatItemAction.item.liveChatTextMessageRenderer.timestampUsec'
+MESSAGE_PREFIX = 'addChatItemAction.item.liveChatTextMessageRenderer'
+SC_PREFIX = 'addLiveChatTickerItemAction.item.liveChatTickerPaidMessageItemRenderer.showItemEndpoint.showLiveChatItemEndpoint.renderer.liveChatPaidMessageRenderer'
+
+AUTHOR_SUBPATH = 'authorName.simpleText'
+TEXT_RUNS_SUBPATH = 'message.runs'
+TIMESTAMP_SUPBATH = 'timestampUsec'
+AMOUNT_SUBPATH = 'purchaseAmountText.simpleText'
 
 INIT_RETRIES = 5
 UPDATE_INTERVAL = 1
@@ -57,6 +64,14 @@ def traverse(d, path):
             k = int(k)
         d = d[k]
     return d
+
+
+def traverse_or_none(d, path):
+    """Traverse, but return none if not found"""
+    try:
+        return traverse(d, path)
+    except (KeyError, IndexError):
+        return None
 
 
 class Monitor:
@@ -97,10 +112,10 @@ class Monitor:
 
         return items[0]['liveStreamingDetails']
 
-    async def get_initial_chat(self, session: aiohttp.ClientSession, continuation: str) -> dict:
+    async def get_initial_chat(self, session: aiohttp.ClientSession, video_id: str) -> dict:
         """Get initial chat JSON object from a continuation token"""
 
-        endpoint = INITIAL_CHAT_ENDPOINT_TEMPLATE.format(continuation=continuation)
+        endpoint = INITIAL_CHAT_ENDPOINT_TEMPLATE.format(video_id=video_id)
 
         async with session.get(endpoint, headers=REQUEST_HEADERS) as resp:
             soup = BeautifulSoup(await resp.text(), features='lxml')
@@ -132,6 +147,49 @@ class Monitor:
         async with session.get(endpoint, headers=REQUEST_HEADERS) as resp:
             return (await resp.json())['response']
 
+    def parse_action(self, action: dict) -> chat.Message:
+        start_timestamp = self.info.start_timestamp
+
+        if has_path(action, MESSAGE_PREFIX):
+            message_obj = traverse(action, MESSAGE_PREFIX)
+
+            if all(
+                has_path(message_obj, pth)
+                for pth in [AUTHOR_SUBPATH, TEXT_RUNS_SUBPATH, TIMESTAMP_SUPBATH]
+            ):
+                author = traverse(message_obj, AUTHOR_SUBPATH)
+                text = ''.join(run.get('text', '') for run in traverse(message_obj, TEXT_RUNS_SUBPATH))
+                timestamp = float(traverse(message_obj, TIMESTAMP_SUPBATH)) / 1_000_000
+
+                return chat.Message(
+                    author=author,
+                    text=text,
+                    timestamp=timestamp,
+                    relative_timestamp=timestamp - start_timestamp,
+                )
+
+        elif has_path(action, SC_PREFIX):
+            message_obj = traverse(action, SC_PREFIX)
+
+            if all(
+                has_path(message_obj, pth)
+                for pth in [AUTHOR_SUBPATH, TEXT_RUNS_SUBPATH, TIMESTAMP_SUPBATH, AMOUNT_SUBPATH]
+            ):
+                author = traverse(message_obj, AUTHOR_SUBPATH)
+                text = ''.join(run.get('text', '') for run in traverse(message_obj, TEXT_RUNS_SUBPATH))
+                timestamp = float(traverse(message_obj, TIMESTAMP_SUPBATH)) / 1_000_000
+                amount = traverse(message_obj, AMOUNT_SUBPATH)
+
+                return chat.SuperChat(
+                    author=author,
+                    text=text,
+                    timestamp=timestamp,
+                    relative_timestamp=timestamp - start_timestamp,
+                    amount=amount,
+                )
+
+        return None
+
     @util.http_session_method
     async def run(self, session: aiohttp.ClientSession):
         """Monitor process"""
@@ -148,14 +206,9 @@ class Monitor:
 
                 self.info.start_timestamp = start_timestamp
 
-                async with session.get(self.info.url) as resp:
-                    soup = BeautifulSoup(await resp.text(), features='lxml')
-
-                chat_url = soup.find(id='live-chat-iframe').attrs['src']
-
-                continuation = parse_qs(urlparse(chat_url).query)['continuation'][0]
-
-                chat_obj = await self.get_initial_chat(session, continuation)
+                chat_obj = await self.get_initial_chat(session, self.info.id)
+                continuation_obj = traverse(chat_obj, INITIAL_CONTINUATION_PATH)
+                actions = traverse_or_none(chat_obj, INITIAL_ACTIONS_PATH)
                 break
 
             except Exception as e:
@@ -168,31 +221,15 @@ class Monitor:
                 continue
 
         while True:
-            if has_path(chat_obj, ACTIONS_PATH):
+            if actions is not None:
                 try:
-                    actions = traverse(chat_obj, ACTIONS_PATH)
-
                     new_messages = []
 
                     for action in actions:
-                        if not all(
-                            has_path(action, pth)
-                            for pth in [AUTHOR_SUBPATH, TEXT_RUNS_SUBPATH, TIMESTAMP_SUPBATH]
-                        ):
-                            continue
+                        message = self.parse_action(action)
 
-                        author = traverse(action, AUTHOR_SUBPATH)
-                        text = ''.join(run.get('text', '') for run in traverse(action, TEXT_RUNS_SUBPATH))
-                        timestamp = float(traverse(action, TIMESTAMP_SUPBATH)) / 1_000_000
-
-                        message = chat.Message(
-                            author=author,
-                            text=text,
-                            timestamp=timestamp,
-                            relative_timestamp=timestamp - start_timestamp,
-                        )
-
-                        new_messages.append(message)
+                        if message is not None:
+                            new_messages.append(message)
 
                     self.report.add_messages(new_messages)
 
@@ -205,8 +242,9 @@ class Monitor:
             await tornado.gen.sleep(UPDATE_INTERVAL)
 
             try:
-                continuation_obj = traverse(chat_obj, CONTINUATION_PATH)
                 chat_obj = await self.get_next_chat(session, continuation_obj)
+                continuation_obj = traverse(chat_obj, CONTINUATION_PATH)
+                actions = traverse_or_none(chat_obj, ACTIONS_PATH)
 
                 # On at least one occasion, the monitor has gotten stuck and not terminated
                 # I'm not sure why, but this should ensure the monitor quits eventually
