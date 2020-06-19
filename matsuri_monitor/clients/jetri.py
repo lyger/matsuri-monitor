@@ -6,14 +6,14 @@ import pandas as pd
 from matsuri_monitor import chat, util
 
 CHANNEL_ENDPOINT = 'https://api.jetri.co/channels'
-LIVE_ENDPOINT = 'https://api.jetri.co/live'
+LIVE_ENDPOINT = 'https://api.jetri.co/live/1.1'
 
 
 class Jetri:
 
     def __init__(self):
         self._lock = mp.Lock()
-        self.lives = pd.DataFrame(index=pd.Series(name='id'), columns=['title', 'type', 'startTime', 'channel'])
+        self.lives = pd.DataFrame(index=pd.Series(name='id'), columns=['title', 'start', 'channel'])
 
     async def retrieve_channels(self, session: aiohttp.ClientSession):
         async with session.get(CHANNEL_ENDPOINT) as resp:
@@ -30,7 +30,9 @@ class Jetri:
             lives = await resp.json()
 
         lives_df = pd.DataFrame.from_records(
-            lives['live'], index='id', columns=['id', 'title', 'type', 'startTime', 'channel']
+            filter(lambda lv: lv['platform'] == 'youtube', lives['live']),
+            index='id',
+            columns=['id', 'title', 'start', 'channel'],
         )
 
         with self._lock:
@@ -39,7 +41,7 @@ class Jetri:
     @property
     def currently_live(self):
         """Returns IDs of currently live streams"""
-        return self.lives[self.lives['type'] == 'live'].index.tolist()
+        return self.lives.index.tolist()
 
     def get_channel_info(self, channel_id: str):
         """Returns a ChannelInfo object for the given channel ID"""
