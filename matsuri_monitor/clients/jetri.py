@@ -29,11 +29,19 @@ class Jetri:
         async with session.get(LIVE_ENDPOINT) as resp:
             lives = await resp.json()
 
-        lives_df = pd.DataFrame.from_records(
-            filter(lambda lv: lv['platform'] == 'youtube', lives['live']),
-            index='id',
-            columns=['id', 'title', 'start', 'channel'],
-        )
+        lives_records = list(filter(lambda lv: lv['platform'] == 'youtube', lives['live']))
+
+        if len(lives_records) > 0:
+            lives_df = pd.DataFrame.from_records(
+                lives_records,
+                index='id',
+                columns=['id', 'title', 'start', 'channel'],
+            )
+        else:
+            lives_df = pd.DataFrame(
+                index=pd.Series(name='id', dtype=str),
+                columns=['id', 'title', 'start', 'channel'],
+            )
 
         with self._lock:
             self.lives = lives_df
