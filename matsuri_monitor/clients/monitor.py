@@ -176,8 +176,6 @@ class Monitor:
 
         for retry in range(INIT_RETRIES):
             try:
-                live_info = await self.get_live_details(session)
-
                 chat_obj = await self.get_initial_chat(session, self.info.id)
                 continuation_obj = traverse(chat_obj, INITIAL_CONTINUATION_PATH)
                 actions = traverse_or_none(chat_obj, INITIAL_ACTIONS_PATH)
@@ -201,7 +199,6 @@ class Monitor:
                         message = self.parse_action(action)
 
                         if message is not None:
-                            print(self.info.id, message)
                             new_messages.append(message)
 
                     self.report.add_messages(new_messages)
