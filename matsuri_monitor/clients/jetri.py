@@ -1,12 +1,13 @@
 import multiprocessing as mp
+from datetime import datetime, timezone
 
 import aiohttp
 import pandas as pd
 
 from matsuri_monitor import chat, util
 
-CHANNEL_ENDPOINT = 'https://api.jetri.co/channels'
-LIVE_ENDPOINT = 'https://api.jetri.co/live/1.1'
+CHANNEL_ENDPOINT = 'https://api.holotools.app/v1/channels'
+LIVE_ENDPOINT = 'https://api.holotools.app/v1/live'
 
 
 class Jetri:
@@ -16,8 +17,17 @@ class Jetri:
         self.lives = pd.DataFrame(index=pd.Series(name='id'), columns=['title', 'start', 'channel'])
 
     async def retrieve_channels(self, session: aiohttp.ClientSession):
-        async with session.get(CHANNEL_ENDPOINT) as resp:
-            channels = (await resp.json())['channels']
+        channels = []
+
+        for offset in range(0, 200, 50):
+            async with session.get(CHANNEL_ENDPOINT, params={'offset': offset, 'limit': 50}) as resp:
+                new_channels = (await resp.json())['channels']
+            
+            if len(new_channels) == 0:
+                break
+
+            channels += new_channels
+
         self.channels = pd.DataFrame.from_records(channels, index='id')
 
     @util.http_session_method
@@ -29,18 +39,27 @@ class Jetri:
         async with session.get(LIVE_ENDPOINT) as resp:
             lives = await resp.json()
 
-        lives_records = list(filter(lambda lv: lv['platform'] == 'youtube', lives['live']))
+        include_cols = ['id', 'title', 'yt_video_key', 'live_start', 'channel']
+
+        lives_records = list(filter(
+            lambda lv: lv['yt_video_key'] is not None and lv['live_start'] is not None,
+            lives['live'],
+        ))
+        lives_records = list(map(lambda lv: {key: lv[key] for key in include_cols}, lives_records))
+
+        for lv in lives_records:
+            lv['channel'] = lv['channel']['id']
 
         if len(lives_records) > 0:
             lives_df = pd.DataFrame.from_records(
                 lives_records,
-                index='id',
-                columns=['id', 'title', 'start', 'channel'],
+                index='yt_video_key',
+                columns=include_cols,
             )
         else:
             lives_df = pd.DataFrame(
-                index=pd.Series(name='id', dtype=str),
-                columns=['id', 'title', 'start', 'channel'],
+                index=pd.Series(name='yt_video_key', dtype=str),
+                columns=include_cols,
             )
 
         with self._lock:
@@ -56,13 +75,17 @@ class Jetri:
         return chat.ChannelInfo(
             id=channel_id,
             name=self.channels.loc[channel_id]['name'],
-            thumbnail_url=self.channels.loc[channel_id]['thumbnail'],
+            thumbnail_url=self.channels.loc[channel_id]['photo'],
         )
 
     def get_live_info(self, video_id: str):
         """Returns a VideoInfo object for the given video ID"""
+        row = self.lives.loc[video_id]
         return chat.VideoInfo(
             id=video_id,
-            title=self.lives.loc[video_id]['title'],
-            channel=self.get_channel_info(self.lives.loc[video_id]['channel']),
+            title=row['title'],
+            channel=self.get_channel_info(row['channel']),
+            start_timestamp=datetime.fromisoformat(
+                row['live_start'].rstrip('zZ')
+            ).replace(tzinfo=timezone.utc).timestamp()
         )

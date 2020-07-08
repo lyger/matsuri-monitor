@@ -2,7 +2,6 @@ import asyncio
 import json
 import logging
 import time
-from datetime import datetime, timezone
 from urllib.parse import parse_qs, urlparse
 
 import aiohttp
@@ -13,11 +12,7 @@ from bs4 import BeautifulSoup
 
 from matsuri_monitor import chat, util
 
-tornado.options.define('api-key', type=str, help='YouTube API key')
-
 logger = logging.getLogger('tornado.general')
-
-VIDEO_API_ENDPOINT = 'https://www.googleapis.com/youtube/v3/videos'
 
 INITIAL_CHAT_ENDPOINT_TEMPLATE = 'https://www.youtube.com/live_chat?v={video_id}'
 CHAT_ENDPOINT_TEMPLATE = 'https://www.youtube.com/live_chat/get_live_chat?continuation={continuation}&pbj=1'
@@ -94,23 +89,6 @@ class Monitor:
     @property
     def is_running(self):
         return not self._stopped_flag.is_set()
-
-    async def get_live_details(self, session: aiohttp.ClientSession):
-        """Get live details of the live this monitor is monitoring"""
-
-        params = {
-            'part': 'liveStreamingDetails',
-            'id': self.info.id,
-            'key': tornado.options.options.api_key,
-        }
-
-        async with session.get(VIDEO_API_ENDPOINT, params=params) as resp:
-            items = (await resp.json())['items']
-
-        if len(items) < 1:
-            raise RuntimeError('Could not get live broadcast info')
-
-        return items[0]['liveStreamingDetails']
 
     async def get_initial_chat(self, session: aiohttp.ClientSession, video_id: str) -> dict:
         """Get initial chat JSON object from a continuation token"""
@@ -200,12 +178,6 @@ class Monitor:
             try:
                 live_info = await self.get_live_details(session)
 
-                start_timestamp = datetime.fromisoformat(
-                    live_info['actualStartTime'].rstrip('zZ')
-                ).replace(tzinfo=timezone.utc).timestamp()
-
-                self.info.start_timestamp = start_timestamp
-
                 chat_obj = await self.get_initial_chat(session, self.info.id)
                 continuation_obj = traverse(chat_obj, INITIAL_CONTINUATION_PATH)
                 actions = traverse_or_none(chat_obj, INITIAL_ACTIONS_PATH)
@@ -229,6 +201,7 @@ class Monitor:
                         message = self.parse_action(action)
 
                         if message is not None:
+                            print(self.info.id, message)
                             new_messages.append(message)
 
                     self.report.add_messages(new_messages)

@@ -8,7 +8,7 @@ Named "Matsuri Monitor" because I'm obsessed and that's how I plan to use it, bu
 
 Code sucks but is probably functional.
 
-You can (probably) deploy it yourself by doing this, replacing `$LOCAL_PORT` with the port on your local machine to serve from, `$LOCAL_ARCHIVES_DIR` with the directory on your local machine to save gzipped JSON reports to, and `$YOUTUBE_API_KEY` with your YouTube Data v3 API key.
+You can (probably) deploy it yourself by doing this, replacing `$LOCAL_PORT` with the port on your local machine to serve from and `$LOCAL_ARCHIVES_DIR` with the directory on your local machine to save gzipped JSON reports to.
 
 ```bash
 $ docker build -t matsuri-monitor .
@@ -16,5 +16,5 @@ $ docker run -d \
     --name matsuri-monitor \
     -p 127.0.0.1:$LOCAL_PORT:8080/tcp \
     --mount type=bind,target=/app/archives,source=$LOCAL_ARCHIVES_DIR \
-    matsuri-monitor --api-key=$YOUTUBE_API_KEY
+    matsuri-monitor
 ```
