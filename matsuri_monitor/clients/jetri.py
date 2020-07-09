@@ -73,7 +73,7 @@ class Jetri:
     def get_channel_info(self, channel_id: str):
         """Returns a ChannelInfo object for the given channel ID"""
         return chat.ChannelInfo(
-            id=channel_id,
+            id=self.channels.loc[channel_id]['yt_channel_id'],
             name=self.channels.loc[channel_id]['name'],
             thumbnail_url=self.channels.loc[channel_id]['photo'],
         )
