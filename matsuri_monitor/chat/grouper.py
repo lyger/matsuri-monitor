@@ -36,7 +36,7 @@ GROUPER_SCHEMA = {
 
 def _regex_condition(value: str) -> Callable[[Message], bool]:
     """Creates a condition that is true when message text matches the given regex"""
-    exp = re.compile(value)
+    exp = re.compile(value, flags=re.IGNORECASE)
 
     def condition(message: Message):
         return exp.search(message.text) is not None

@@ -9,6 +9,15 @@
         "skip_channels": ["UCQ0UDLQCjY0rmuxCDE38FGg"]
     },
     {
+        "type": "regex",
+        "value": "matsuri",
+        "interval": 10,
+        "min_len": 5,
+        "notify": true,
+        "unique_author": true,
+        "skip_channels": ["UCQ0UDLQCjY0rmuxCDE38FGg"]
+    },
+    {
         "type": "username",
         "value": "Matsuri Channel 夏色まつり",
         "interval": 5,
