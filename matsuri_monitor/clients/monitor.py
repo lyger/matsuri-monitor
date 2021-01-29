@@ -1,6 +1,7 @@
 import asyncio
 import json
 import logging
+import re
 import time
 from urllib.parse import parse_qs, urlparse
 
@@ -15,11 +16,13 @@ from matsuri_monitor import chat, util
 logger = logging.getLogger('tornado.general')
 
 INITIAL_CHAT_ENDPOINT_TEMPLATE = 'https://www.youtube.com/live_chat?v={video_id}'
-CHAT_ENDPOINT_TEMPLATE = 'https://www.youtube.com/live_chat/get_live_chat?continuation={continuation}&pbj=1'
+CHAT_ENDPOINT_TEMPLATE = 'https://www.youtube.com/youtubei/v1/live_chat/get_live_chat?key={key}'
 
 REQUEST_HEADERS = {
     'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/80.0.3987.149 Safari/537.36',
 }
+
+YTCFG_RE = re.compile(r'^ytcfg.set\((.+)\);$')
 
 INITIAL_CONTINUATION_PATH = 'contents.liveChatRenderer.continuations.0'
 INITIAL_ACTIONS_PATH = 'contents.liveChatRenderer.actions'
@@ -98,15 +101,31 @@ class Monitor:
         async with session.get(endpoint, headers=REQUEST_HEADERS) as resp:
             soup = BeautifulSoup(await resp.text(), features='lxml')
 
+        chat_obj, key, context = None, None, None
+
         for script in soup.find_all('script'):
             if 'ytInitialData' in script.text:
-                break
+                initial_data_str = script.text.split('=', 1)[-1].strip().strip(';')
+                chat_obj = json.loads(initial_data_str)
+                continue
+                
+            match = YTCFG_RE.search(script.text)
+            
+            if match:
+                cfg_obj = json.loads(match.group(1))
+                key = cfg_obj['INNERTUBE_API_KEY']
+                context = cfg_obj['INNERTUBE_CONTEXT']
+                continue
 
-        initial_data_str = script.text.split('=', 1)[-1].strip().strip(';')
+        if chat_obj is None:
+            raise RuntimeError('Failed to retrieve initial chat object')
 
-        return json.loads(initial_data_str)
+        if key is None:
+            raise RuntimeError('Failed to retrieve ytcfg object')
 
-    async def get_next_chat(self, session: aiohttp.ClientSession, continuation_obj: dict) -> dict:
+        return chat_obj, key, context
+
+    async def get_next_chat(self, session: aiohttp.ClientSession, continuation_obj: dict, key: str, context: dict) -> dict:
         """Get next chat JSON object from the previous object's continuation object"""
 
         continuation = None
@@ -120,10 +139,15 @@ class Monitor:
         if not continuation:
             raise KeyError('No continuation token found')
 
-        endpoint = CHAT_ENDPOINT_TEMPLATE.format(continuation=continuation)
+        endpoint = CHAT_ENDPOINT_TEMPLATE.format(key=key)
 
-        async with session.get(endpoint, headers=REQUEST_HEADERS) as resp:
-            return (await resp.json())['response']
+        data = {
+            'context': context,
+            'continuation': continuation,
+        }
+
+        async with session.post(endpoint, json=data, headers=REQUEST_HEADERS) as resp:
+            return (await resp.json())
 
     def parse_action(self, action: dict) -> chat.Message:
         start_timestamp = self.info.start_timestamp
@@ -176,7 +200,7 @@ class Monitor:
 
         for retry in range(INIT_RETRIES):
             try:
-                chat_obj = await self.get_initial_chat(session, self.info.id)
+                chat_obj, key, context = await self.get_initial_chat(session, self.info.id)
                 continuation_obj = traverse(chat_obj, INITIAL_CONTINUATION_PATH)
                 actions = traverse_or_none(chat_obj, INITIAL_ACTIONS_PATH)
                 break
@@ -212,7 +236,7 @@ class Monitor:
             await tornado.gen.sleep(UPDATE_INTERVAL)
 
             try:
-                chat_obj = await self.get_next_chat(session, continuation_obj)
+                chat_obj = await self.get_next_chat(session, continuation_obj, key, context)
                 continuation_obj = traverse(chat_obj, CONTINUATION_PATH)
                 actions = traverse_or_none(chat_obj, ACTIONS_PATH)
 
