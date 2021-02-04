@@ -22,7 +22,8 @@ REQUEST_HEADERS = {
     'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/80.0.3987.149 Safari/537.36',
 }
 
-YTCFG_RE = re.compile(r'^ytcfg.set\((.+)\);$')
+YTCFG_RE = re.compile(r'^\s*ytcfg.set\((.+)\);?$', re.MULTILINE)
+YTCFG_ARGS_RE = re.compile(r'^"([A-Z_]+)", (.+)$')
 
 INITIAL_CONTINUATION_PATH = 'contents.liveChatRenderer.continuations.0'
 INITIAL_ACTIONS_PATH = 'contents.liveChatRenderer.actions'
@@ -108,14 +109,17 @@ class Monitor:
                 initial_data_str = script.text.split('=', 1)[-1].strip().strip(';')
                 chat_obj = json.loads(initial_data_str)
                 continue
-                
-            match = YTCFG_RE.search(script.text)
             
-            if match:
-                cfg_obj = json.loads(match.group(1))
-                key = cfg_obj['INNERTUBE_API_KEY']
-                context = cfg_obj['INNERTUBE_CONTEXT']
-                continue
+            for args in YTCFG_RE.findall(script.text):
+                if args.startswith('{'):
+                    args_obj = json.loads(args)
+                    if 'INNERTUBE_API_KEY' in args_obj:
+                        key = args_obj['INNERTUBE_API_KEY']
+                    continue
+                
+                match = YTCFG_ARGS_RE.search(args)
+                if match and match.group(1) == 'INNERTUBE_CONTEXT':
+                    context = json.loads(match.group(2))
 
         if chat_obj is None:
             raise RuntimeError('Failed to retrieve initial chat object')
