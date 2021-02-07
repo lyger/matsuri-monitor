@@ -2,10 +2,10 @@ import asyncio
 import json
 import logging
 import re
-import time
 from urllib.parse import parse_qs, urlparse
 
 import aiohttp
+from aiohttp.client_exceptions import ContentTypeError
 import tornado.gen
 import tornado.ioloop
 import tornado.options
@@ -151,7 +151,11 @@ class Monitor:
         }
 
         async with session.post(endpoint, json=data, headers=REQUEST_HEADERS) as resp:
-            return (await resp.json())
+            try:
+                return (await resp.json())
+            except ContentTypeError as err:
+                logger.exception(f'{err}: {resp.text()}')
+                raise err
 
     def parse_action(self, action: dict) -> chat.Message:
         start_timestamp = self.info.start_timestamp
