@@ -154,7 +154,7 @@ class Monitor:
             try:
                 return (await resp.json())
             except ContentTypeError as err:
-                logger.exception(f'{err}: {resp.text()}')
+                logger.exception(f'{err}: {await resp.text()}')
                 raise err
 
     def parse_action(self, action: dict) -> chat.Message:
