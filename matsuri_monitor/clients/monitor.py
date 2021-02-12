@@ -115,11 +115,15 @@ class Monitor:
                     args_obj = json.loads(args)
                     if 'INNERTUBE_API_KEY' in args_obj:
                         key = args_obj['INNERTUBE_API_KEY']
-                    continue
+                    if 'INNERTUBE_CONTEXT' in args:
+                        context = args_obj['INNERTUBE_CONTEXT']
                 
                 match = YTCFG_ARGS_RE.search(args)
-                if match and match.group(1) == 'INNERTUBE_CONTEXT':
-                    context = json.loads(match.group(2))
+                if match:
+                    if match.group(1) == 'INNERTUBE_API_KEY':
+                        key = match.group(2)
+                    if match.group(1) == 'INNERTUBE_CONTEXT':
+                        context = json.loads(match.group(2))
 
         if chat_obj is None:
             raise RuntimeError('Failed to retrieve initial chat object')
@@ -261,7 +265,7 @@ class Monitor:
                     break
 
             except (KeyError, json.JSONDecodeError) as e:
-                logger.info(f'Could not fetch more chat for video_id={self.info.id}: {e}')
+                logger.exception(f'Could not fetch more chat for video_id={self.info.id}: {type(e).__name__}')
                 break
 
             except Exception as e:
