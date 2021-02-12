@@ -260,8 +260,8 @@ class Monitor:
                     )
                     break
 
-            except (KeyError, json.JSONDecodeError):
-                logger.info(f'Could not fetch more chat for video_id={self.info.id}')
+            except (KeyError, json.JSONDecodeError) as e:
+                logger.info(f'Could not fetch more chat for video_id={self.info.id}: {e}')
                 break
 
             except Exception as e:
