@@ -1,7 +1,9 @@
 import asyncio
+import dataclasses
 import json
 import logging
 import re
+from typing import Any, Dict
 from urllib.parse import parse_qs, urlparse
 
 import aiohttp
@@ -71,6 +73,18 @@ def traverse_or_none(d, path):
         return traverse(d, path)
     except (KeyError, IndexError):
         return None
+
+
+class RestartMonitor(Exception):
+    pass
+
+
+@dataclasses.dataclass
+class ChatState:
+    chat_obj: Dict[str, Any]
+    key: str
+    context: Dict[str, Any]
+    continuation_obj: Dict[str, Any]
 
 
 class Monitor:
@@ -204,18 +218,13 @@ class Monitor:
 
         return None
 
-    @util.http_session_method
-    async def run(self, session: aiohttp.ClientSession):
-        """Monitor process"""
-        termination_signals = 0
-        termination_cutoff = 10
-
+    async def get_initial_state(self, session: aiohttp.ClientSession):
         for retry in range(INIT_RETRIES):
             try:
                 chat_obj, key, context = await self.get_initial_chat(session, self.info.id)
                 continuation_obj = traverse(chat_obj, INITIAL_CONTINUATION_PATH)
                 actions = traverse_or_none(chat_obj, INITIAL_ACTIONS_PATH)
-                break
+                return actions, ChatState(chat_obj, key, context, continuation_obj)
 
             except Exception as e:
                 if retry == INIT_RETRIES - 1:
@@ -225,6 +234,38 @@ class Monitor:
                     return
 
                 continue
+
+    async def get_next_state(self, session: aiohttp.ClientSession, prev_state: ChatState):
+        try:
+            chat_obj = await self.get_next_chat(session, prev_state.continuation_obj, prev_state.key, prev_state.context)
+            continuation_obj = traverse(chat_obj, CONTINUATION_PATH)
+            actions = traverse_or_none(chat_obj, ACTIONS_PATH)
+
+            return actions, ChatState(chat_obj, prev_state.key, prev_state.context, continuation_obj)
+
+        except KeyError as e:
+            logger.exception(f'KeyError for video_id={self.info.id} (keys {list(chat_obj.keys())})')
+            raise RestartMonitor()
+
+        except json.JSONDecodeError as e:
+            logger.exception(f'JSONDecodeError for video_id={self.info.id}')
+            raise RestartMonitor()
+
+        except Exception as e:
+            error_name = type(e).__name__
+            logger.exception(f'Error while fetching continuation for video_id={self.info.id} ({error_name})')
+            raise RestartMonitor()
+
+    @util.http_session_method
+    async def run(self, session: aiohttp.ClientSession):
+        """Monitor process"""
+        termination_signals = 0
+        termination_cutoff = 10
+
+        restarts = 0
+        restart_cutoff = 10
+
+        actions, state = await self.get_initial_state(session)
 
         while True:
             if actions is not None:
@@ -236,6 +277,7 @@ class Monitor:
 
                         if message is not None:
                             new_messages.append(message)
+                            print(f"[{self.info.id}] {message.text}")
 
                     self.report.add_messages(new_messages)
 
@@ -248,29 +290,26 @@ class Monitor:
             await tornado.gen.sleep(UPDATE_INTERVAL)
 
             try:
-                chat_obj = await self.get_next_chat(session, continuation_obj, key, context)
-                continuation_obj = traverse(chat_obj, CONTINUATION_PATH)
-                actions = traverse_or_none(chat_obj, ACTIONS_PATH)
+                actions, state = await self.get_next_state(session, state)
 
-                # On at least one occasion, the monitor has gotten stuck and not terminated
-                # I'm not sure why, but this should ensure the monitor quits eventually
-                if self._terminate_flag.is_set():
-                    termination_signals += 1
+            except RestartMonitor:
+                restarts += 1
+                if restarts >= restart_cutoff:
+                    logger.warning(f'Stopping monitor after {restarts} restarts for video_id={self.info.id}')
+                
+                logger.warning(f'Restarting monitor for video_id={self.info.id} ({restarts}/{restart_cutoff})')
+                actions, state = await self.get_initial_state(session)
 
-                if termination_signals >= termination_cutoff:
-                    logger.warning(
-                        f'Stopping monitor {termination_cutoff} iterations after termination '
-                        f'for video_id={self.info.id}'
-                    )
-                    break
+            # On at least one occasion, the monitor has gotten stuck and not terminated
+            # I'm not sure why, but this should ensure the monitor quits eventually
+            if self._terminate_flag.is_set():
+                termination_signals += 1
 
-            except (KeyError, json.JSONDecodeError) as e:
-                logger.exception(f'Could not fetch more chat for video_id={self.info.id}: {type(e).__name__}')
-                break
-
-            except Exception as e:
-                error_name = type(e).__name__
-                logger.exception(f'Error while fetching continuation for video_id={self.info.id} ({error_name})')
+            if termination_signals >= termination_cutoff:
+                logger.warning(
+                    f'Stopping monitor {termination_cutoff} iterations after termination '
+                    f'for video_id={self.info.id}'
+                )
                 break
 
         await self._terminate_flag.wait()
