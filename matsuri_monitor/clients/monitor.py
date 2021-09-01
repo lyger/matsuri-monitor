@@ -277,7 +277,6 @@ class Monitor:
 
                         if message is not None:
                             new_messages.append(message)
-                            print(f"[{self.info.id}] {message.text}")
 
                     self.report.add_messages(new_messages)
 
