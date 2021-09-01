@@ -79,6 +79,10 @@ class RestartMonitor(Exception):
     pass
 
 
+class AbortMonitor(Exception):
+    pass
+
+
 @dataclasses.dataclass
 class ChatState:
     chat_obj: Dict[str, Any]
@@ -231,7 +235,7 @@ class Monitor:
                     error_name = type(e).__name__
                     logger.exception(f'Failed to initialize in monitor for video_id={self.info.id} ({error_name})')
                     self._stopped_flag.set()
-                    return
+                    raise AbortMonitor()
 
                 continue
 
@@ -265,7 +269,10 @@ class Monitor:
         restarts = 0
         restart_cutoff = 10
 
-        actions, state = await self.get_initial_state(session)
+        try:
+            actions, state = await self.get_initial_state(session)
+        except AbortMonitor:
+            return
 
         while True:
             if actions is not None:
@@ -297,7 +304,10 @@ class Monitor:
                     logger.warning(f'Stopping monitor after {restarts} restarts for video_id={self.info.id}')
                 
                 logger.warning(f'Restarting monitor for video_id={self.info.id} ({restarts}/{restart_cutoff})')
-                actions, state = await self.get_initial_state(session)
+                try:
+                    actions, state = await self.get_initial_state(session)
+                except AbortMonitor:
+                    return
 
             # On at least one occasion, the monitor has gotten stuck and not terminated
             # I'm not sure why, but this should ensure the monitor quits eventually
