@@ -24,7 +24,7 @@ REQUEST_HEADERS = {
     'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/80.0.3987.149 Safari/537.36',
 }
 
-YTCFG_RE = re.compile(r'^\s*ytcfg.set\((.+)\);?$', re.MULTILINE)
+YTCFG_RE = re.compile(r'^\s*ytcfg.set\((.+)\);?', re.MULTILINE)
 YTCFG_ARGS_RE = re.compile(r'^"([A-Z_]+)", (.+)$')
 
 INITIAL_CONTINUATION_PATH = 'contents.liveChatRenderer.continuations.0'
