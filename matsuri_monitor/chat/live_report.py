@@ -71,14 +71,16 @@ class LiveReport:
             messages_json = [msg.json() for msg in self.messages]
             messages_path = tornado.options.options.archives_dir / f'{report_basename}_chat.json.gz'
 
-            with gzip.open(messages_path, 'wt') as dump_file:
-                json.dump(messages_json, dump_file)
+            if not messages_path.exists():
+                with gzip.open(messages_path, 'wt') as dump_file:
+                    json.dump(messages_json, dump_file)
 
         if len(self) == 0:
             return
 
-        with gzip.open(report_path, 'wt') as report_file:
-            json.dump(self.json(), report_file)
+        if not report_path.exists():
+            with gzip.open(report_path, 'wt') as report_file:
+                json.dump(self.json(), report_file)
 
     def json(self) -> dict:
         """Return a JSON representation of this report"""

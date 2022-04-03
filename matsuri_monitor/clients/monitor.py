@@ -261,18 +261,15 @@ class Monitor:
             raise RestartMonitor()
 
     @util.http_session_method
-    async def run(self, session: aiohttp.ClientSession):
+    async def _run(self, session: aiohttp.ClientSession):
         """Monitor process"""
         termination_signals = 0
-        termination_cutoff = 10
-
-        restarts = 0
-        restart_cutoff = 10
+        termination_cutoff = 5
 
         try:
             actions, state = await self.get_initial_state(session)
         except AbortMonitor:
-            return
+            return False
 
         while True:
             if actions is not None:
@@ -291,23 +288,11 @@ class Monitor:
                     error_name = type(e).__name__
                     logger.exception(f'Error while running monitor for video_id={self.info.id} ({error_name})')
                     self._stopped_flag.set()
-                    return
+                    return False
 
             await tornado.gen.sleep(UPDATE_INTERVAL)
 
-            try:
-                actions, state = await self.get_next_state(session, state)
-
-            except RestartMonitor:
-                restarts += 1
-                if restarts >= restart_cutoff:
-                    logger.warning(f'Stopping monitor after {restarts} restarts for video_id={self.info.id}')
-                
-                logger.warning(f'Restarting monitor for video_id={self.info.id} ({restarts}/{restart_cutoff})')
-                try:
-                    actions, state = await self.get_initial_state(session)
-                except AbortMonitor:
-                    return
+            actions, state = await self.get_next_state(session, state)
 
             # On at least one occasion, the monitor has gotten stuck and not terminated
             # I'm not sure why, but this should ensure the monitor quits eventually
@@ -319,7 +304,27 @@ class Monitor:
                     f'Stopping monitor {termination_cutoff} iterations after termination '
                     f'for video_id={self.info.id}'
                 )
-                break
+                return True
+
+    async def run(self):
+        """Wrapper method to handle restarting monitor."""
+        restarts = 0
+        restart_cutoff = 5
+
+        while restarts < restart_cutoff:
+            try:
+                success = await self._run()
+                if success:
+                    break
+                else:
+                    raise RestartMonitor()
+            except RestartMonitor:
+                restarts += 1
+                if restarts >= restart_cutoff:
+                    logger.warning(f'Stopping monitor after {restarts} restarts for video_id={self.info.id}')
+                    self._stopped_flag.set()
+                else:
+                    logger.warning(f'Restarting monitor for video_id={self.info.id} ({restarts}/{restart_cutoff})')
 
         await self._terminate_flag.wait()
 
@@ -334,7 +339,6 @@ class Monitor:
 
         if current_ioloop is None:
             current_ioloop = tornado.ioloop.IOLoop.current()
-        self._running = True
 
         logger.info(f'Begin monitoring video_id={self.info.id}')
         current_ioloop.add_callback(self.run)

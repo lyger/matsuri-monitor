@@ -60,9 +60,10 @@ class Supervisor:
             if not monitor.is_running:
                 to_delete.append(video_id)
 
-        logger.info(f'Removing {len(to_delete)} stopped monitors')
+        logger.info(f'Removing {len(to_delete)} stopped monitors: {to_delete}')
 
         for video_id in to_delete:
+            self.live_monitors[video_id].terminate()
             del self.live_monitors[video_id]
 
         # Refresh currently live list and find lives to start and terminate
@@ -93,7 +94,7 @@ class Supervisor:
             monitor = self.live_monitors[video_id]
             monitor.terminate()
 
-        logger.info(f'Terminated {len(stopped_lives)} monitors')
+        logger.info(f'Terminated {len(stopped_lives)} monitors: {list(stopped_lives)}')
 
         logger.info('[End supervisor update]')
 
