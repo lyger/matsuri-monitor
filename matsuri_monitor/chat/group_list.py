@@ -5,7 +5,6 @@ from matsuri_monitor.chat.message import Message
 
 
 class GroupList:
-
     def __init__(self, grouper: Grouper):
         """init
 
@@ -18,7 +17,7 @@ class GroupList:
         self.grouper = grouper
         self.description = grouper.description
         self.notify = grouper.notify
-        self.last_timestamp = -float('inf')
+        self.last_timestamp = -float("inf")
 
     def update(self, messages: List[Message]):
         """Recompute groups from the given list of Messages"""
@@ -31,7 +30,9 @@ class GroupList:
                 else:
                     self.add_to_new_group(message)
 
-        self.groups = list(filter(lambda g: len(g) >= self.grouper.min_len, self.groups))
+        self.groups = list(
+            filter(lambda g: len(g) >= self.grouper.min_len, self.groups)
+        )
 
     def add_to_new_group(self, message: Message):
         """Add message to a new group"""
@@ -42,7 +43,9 @@ class GroupList:
         """Add message to current last group"""
         if len(self.groups) == 0:
             return self.add_to_new_group(message)
-        if self.grouper.unique_author and any(message.author == other.author for other in self.groups[-1]):
+        if self.grouper.unique_author and any(
+            message.author == other.author for other in self.groups[-1]
+        ):
             return
         self.groups[-1].append(message)
         self.last_timestamp = message.timestamp

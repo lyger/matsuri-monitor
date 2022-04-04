@@ -12,12 +12,12 @@ class Message:
 
     @property
     def _type(self):
-        return 'message'
+        return "message"
 
     def json(self) -> dict:
         """Return a JSON representation of this message"""
         d = asdict(self)
-        d['type'] = self._type
+        d["type"] = self._type
 
         return d
 
@@ -25,7 +25,7 @@ class Message:
 @dataclass
 class SuperChat(Message):
     amount: str
-    
+
     @property
     def _type(self):
-        return 'superchat'
+        return "superchat"

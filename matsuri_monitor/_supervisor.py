@@ -9,13 +9,14 @@ from cachetools import TTLCache, cached
 
 from matsuri_monitor import chat, clients
 
-tornado.options.define('history-days', default=7, type=int, help='Number of days of history to save')
+tornado.options.define(
+    "history-days", default=7, type=int, help="Number of days of history to save"
+)
 
-logger = logging.getLogger('tornado.general')
+logger = logging.getLogger("tornado.general")
 
 
 class Supervisor:
-
     def __init__(self, interval: float):
         """init
 
@@ -44,7 +45,7 @@ class Supervisor:
         if current_ioloop is None:
             current_ioloop = tornado.ioloop.IOLoop.current()
 
-        logger.info('[Begin supervisor update]')
+        logger.info("[Begin supervisor update]")
 
         # Refresh groupers
         new_groupers = chat.Grouper.load()
@@ -60,7 +61,7 @@ class Supervisor:
             if not monitor.is_running:
                 to_delete.append(video_id)
 
-        logger.info(f'Removing {len(to_delete)} stopped monitors: {to_delete}')
+        logger.info(f"Removing {len(to_delete)} stopped monitors: {to_delete}")
 
         for video_id in to_delete:
             self.live_monitors[video_id].terminate()
@@ -87,31 +88,38 @@ class Supervisor:
 
             self.live_monitors[video_id] = monitor
 
-        logger.info(f'Started {len(new_lives)} new monitors')
+        logger.info(f"Started {len(new_lives)} new monitors")
 
         # Send terminate signal to finished lives and move reports to archives
         for video_id in stopped_lives:
             monitor = self.live_monitors[video_id]
             monitor.terminate()
 
-        logger.info(f'Terminated {len(stopped_lives)} monitors: {list(stopped_lives)}')
+        logger.info(f"Terminated {len(stopped_lives)} monitors: {list(stopped_lives)}")
 
-        logger.info('[End supervisor update]')
+        logger.info("[End supervisor update]")
 
     @cached(TTLCache(1, 5))
     def live_json(self) -> dict:
         """JSON object containing reports of all currently live streams"""
-        return {'reports': [monitor.report.json() for monitor in self.live_monitors.values() if monitor.is_running]}
+        return {
+            "reports": [
+                monitor.report.json()
+                for monitor in self.live_monitors.values()
+                if monitor.is_running
+            ]
+        }
 
     def start(self, current_ioloop: tornado.ioloop.IOLoop):
         """Begin update loop"""
+
         async def update_loop():
             while True:
                 try:
                     await self.update(current_ioloop)
                 except Exception as e:
                     error_name = type(e).__name__
-                    logger.exception(f'Exception in supervisor update ({error_name})')
+                    logger.exception(f"Exception in supervisor update ({error_name})")
                 await tornado.gen.sleep(self.interval)
 
         current_ioloop.add_callback(update_loop)

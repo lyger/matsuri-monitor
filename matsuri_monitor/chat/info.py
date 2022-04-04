@@ -1,12 +1,13 @@
 from dataclasses import dataclass
 
-VIDEO_URL_TEMPLATE = 'https://www.youtube.com/watch?v={video_id}'
-CHANNEL_URL_TEMPLATE = 'https://www.youtube.com/channel/{channel_id}'
+VIDEO_URL_TEMPLATE = "https://www.youtube.com/watch?v={video_id}"
+CHANNEL_URL_TEMPLATE = "https://www.youtube.com/channel/{channel_id}"
 
 
 @dataclass
 class ChannelInfo:
     """Holds information about a YouTube channel"""
+
     id: str
     name: str
     thumbnail_url: str
@@ -20,6 +21,7 @@ class ChannelInfo:
 @dataclass
 class VideoInfo:
     """Holds information about a YouTube live stream (live or archive)"""
+
     id: str
     title: str
     channel: ChannelInfo

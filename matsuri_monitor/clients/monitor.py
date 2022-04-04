@@ -7,46 +7,49 @@ from typing import Any, Dict
 from urllib.parse import parse_qs, urlparse
 
 import aiohttp
-from aiohttp.client_exceptions import ContentTypeError
 import tornado.gen
 import tornado.ioloop
 import tornado.options
+from aiohttp.client_exceptions import ContentTypeError
 from bs4 import BeautifulSoup
 
 from matsuri_monitor import chat, util
 
-logger = logging.getLogger('tornado.general')
+logger = logging.getLogger("tornado.general")
 
-INITIAL_CHAT_ENDPOINT_TEMPLATE = 'https://www.youtube.com/live_chat?v={video_id}'
-CHAT_ENDPOINT_TEMPLATE = 'https://www.youtube.com/youtubei/v1/live_chat/get_live_chat?key={key}'
+INITIAL_CHAT_ENDPOINT_TEMPLATE = "https://www.youtube.com/live_chat?v={video_id}"
+CHAT_ENDPOINT_TEMPLATE = (
+    "https://www.youtube.com/youtubei/v1/live_chat/get_live_chat?key={key}"
+)
 
 REQUEST_HEADERS = {
-    'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/80.0.3987.149 Safari/537.36',
+    "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/80.0.3987.149 Safari/537.36",
 }
 
-YTCFG_RE = re.compile(r'^\s*ytcfg.set\((.+)\);?', re.MULTILINE)
+YTCFG_RE = re.compile(r"^\s*ytcfg.set\((.+)\);?", re.MULTILINE)
 YTCFG_ARGS_RE = re.compile(r'^"([A-Z_]+)", (.+)$')
 
-INITIAL_CONTINUATION_PATH = 'contents.liveChatRenderer.continuations.0'
-INITIAL_ACTIONS_PATH = 'contents.liveChatRenderer.actions'
+INITIAL_CONTINUATION_PATH = "contents.liveChatRenderer.continuations.0"
+INITIAL_ACTIONS_PATH = "contents.liveChatRenderer.actions"
 
-CONTINUATION_PATH = 'continuationContents.liveChatContinuation.continuations.0'
-ACTIONS_PATH = 'continuationContents.liveChatContinuation.actions'
+CONTINUATION_PATH = "continuationContents.liveChatContinuation.continuations.0"
+ACTIONS_PATH = "continuationContents.liveChatContinuation.actions"
 
-MESSAGE_PREFIX = 'addChatItemAction.item.liveChatTextMessageRenderer'
-SC_PREFIX = 'addLiveChatTickerItemAction.item.liveChatTickerPaidMessageItemRenderer.showItemEndpoint.showLiveChatItemEndpoint.renderer.liveChatPaidMessageRenderer'
+MESSAGE_PREFIX = "addChatItemAction.item.liveChatTextMessageRenderer"
+SC_PREFIX = "addLiveChatTickerItemAction.item.liveChatTickerPaidMessageItemRenderer.showItemEndpoint.showLiveChatItemEndpoint.renderer.liveChatPaidMessageRenderer"
 
-AUTHOR_SUBPATH = 'authorName.simpleText'
-TEXT_RUNS_SUBPATH = 'message.runs'
-TIMESTAMP_SUPBATH = 'timestampUsec'
-AMOUNT_SUBPATH = 'purchaseAmountText.simpleText'
+AUTHOR_SUBPATH = "authorName.simpleText"
+TEXT_RUNS_SUBPATH = "message.runs"
+TIMESTAMP_SUPBATH = "timestampUsec"
+AMOUNT_SUBPATH = "purchaseAmountText.simpleText"
 
 INIT_RETRIES = 5
 UPDATE_INTERVAL = 1
 
+
 def has_path(d, path):
     """Check if a dot-separated path is in the given nested dict/list"""
-    for k in path.split('.'):
+    for k in path.split("."):
         if k.isdigit():
             k = int(k)
             if k >= len(d):
@@ -60,7 +63,7 @@ def has_path(d, path):
 
 def traverse(d, path):
     """Return the value at the given path from the given nested dict/list"""
-    for k in path.split('.'):
+    for k in path.split("."):
         if k.isdigit():
             k = int(k)
         d = d[k]
@@ -92,7 +95,6 @@ class ChatState:
 
 
 class Monitor:
-
     def __init__(self, info: chat.VideoInfo, report: chat.LiveReport):
         """init
 
@@ -112,71 +114,79 @@ class Monitor:
     def is_running(self):
         return not self._stopped_flag.is_set()
 
-    async def get_initial_chat(self, session: aiohttp.ClientSession, video_id: str) -> dict:
+    async def get_initial_chat(
+        self, session: aiohttp.ClientSession, video_id: str
+    ) -> dict:
         """Get initial chat JSON object from a continuation token"""
 
         endpoint = INITIAL_CHAT_ENDPOINT_TEMPLATE.format(video_id=video_id)
 
         async with session.get(endpoint, headers=REQUEST_HEADERS) as resp:
-            soup = BeautifulSoup(await resp.text(), features='lxml')
+            soup = BeautifulSoup(await resp.text(), features="lxml")
 
         chat_obj, key, context = None, None, None
 
-        for script in soup.find_all('script'):
-            if 'ytInitialData' in script.text:
-                initial_data_str = script.text.split('=', 1)[-1].strip().strip(';')
+        for script in soup.find_all("script"):
+            if "ytInitialData" in script.text:
+                initial_data_str = script.text.split("=", 1)[-1].strip().strip(";")
                 chat_obj = json.loads(initial_data_str)
                 continue
-            
+
             for args in YTCFG_RE.findall(script.text):
-                if args.startswith('{'):
+                if args.startswith("{"):
                     args_obj = json.loads(args)
-                    if 'INNERTUBE_API_KEY' in args_obj:
-                        key = args_obj['INNERTUBE_API_KEY']
-                    if 'INNERTUBE_CONTEXT' in args:
-                        context = args_obj['INNERTUBE_CONTEXT']
-                
+                    if "INNERTUBE_API_KEY" in args_obj:
+                        key = args_obj["INNERTUBE_API_KEY"]
+                    if "INNERTUBE_CONTEXT" in args:
+                        context = args_obj["INNERTUBE_CONTEXT"]
+
                 match = YTCFG_ARGS_RE.search(args)
                 if match:
-                    if match.group(1) == 'INNERTUBE_API_KEY':
+                    if match.group(1) == "INNERTUBE_API_KEY":
                         key = match.group(2)
-                    if match.group(1) == 'INNERTUBE_CONTEXT':
+                    if match.group(1) == "INNERTUBE_CONTEXT":
                         context = json.loads(match.group(2))
 
         if chat_obj is None:
-            raise RuntimeError('Failed to retrieve initial chat object')
+            raise RuntimeError("Failed to retrieve initial chat object")
 
         if key is None:
-            raise RuntimeError('Failed to retrieve ytcfg object')
+            raise RuntimeError("Failed to retrieve ytcfg object")
 
         return chat_obj, key, context
 
-    async def get_next_chat(self, session: aiohttp.ClientSession, continuation_obj: dict, key: str, context: dict) -> dict:
+    async def get_next_chat(
+        self,
+        session: aiohttp.ClientSession,
+        continuation_obj: dict,
+        key: str,
+        context: dict,
+    ) -> dict:
         """Get next chat JSON object from the previous object's continuation object"""
 
         continuation = None
 
         # YouTube's API has various "continuationData" types, but any will do if it has a continuation token
         for data in continuation_obj.values():
-            if 'continuation' in data:
-                continuation = data['continuation']
+            if "continuation" in data:
+                continuation = data["continuation"]
                 break
 
         if not continuation:
-            raise KeyError('No continuation token found')
+            raise KeyError("No continuation token found")
 
         endpoint = CHAT_ENDPOINT_TEMPLATE.format(key=key)
 
         data = {
-            'context': context,
-            'continuation': continuation,
+            "context": context,
+            "continuation": continuation,
         }
 
         async with session.post(endpoint, json=data, headers=REQUEST_HEADERS) as resp:
             try:
-                return (await resp.json())
+                return await resp.json()
             except ContentTypeError as err:
-                logger.exception(f'{err}: {await resp.text()}')
+                logger.exception(f"{err}: {await resp.text()}")
                 raise err
 
     def parse_action(self, action: dict) -> chat.Message:
@@ -190,7 +200,10 @@ class Monitor:
                 for pth in [AUTHOR_SUBPATH, TEXT_RUNS_SUBPATH, TIMESTAMP_SUPBATH]
             ):
                 author = traverse(message_obj, AUTHOR_SUBPATH)
-                text = ''.join(run.get('text', '') for run in traverse(message_obj, TEXT_RUNS_SUBPATH))
+                text = "".join(
+                    run.get("text", "")
+                    for run in traverse(message_obj, TEXT_RUNS_SUBPATH)
+                )
                 timestamp = float(traverse(message_obj, TIMESTAMP_SUPBATH)) / 1_000_000
 
                 return chat.Message(
@@ -205,10 +218,18 @@ class Monitor:
 
             if all(
                 has_path(message_obj, pth)
-                for pth in [AUTHOR_SUBPATH, TEXT_RUNS_SUBPATH, TIMESTAMP_SUPBATH, AMOUNT_SUBPATH]
+                for pth in [
+                    AUTHOR_SUBPATH,
+                    TEXT_RUNS_SUBPATH,
+                    TIMESTAMP_SUPBATH,
+                    AMOUNT_SUBPATH,
+                ]
             ):
                 author = traverse(message_obj, AUTHOR_SUBPATH)
-                text = ''.join(run.get('text', '') for run in traverse(message_obj, TEXT_RUNS_SUBPATH))
+                text = "".join(
+                    run.get("text", "")
+                    for run in traverse(message_obj, TEXT_RUNS_SUBPATH)
+                )
                 timestamp = float(traverse(message_obj, TIMESTAMP_SUPBATH)) / 1_000_000
                 amount = traverse(message_obj, AMOUNT_SUBPATH)
 
@@ -225,7 +246,9 @@ class Monitor:
     async def get_initial_state(self, session: aiohttp.ClientSession):
         for retry in range(INIT_RETRIES):
             try:
-                chat_obj, key, context = await self.get_initial_chat(session, self.info.id)
+                chat_obj, key, context = await self.get_initial_chat(
+                    session, self.info.id
+                )
                 continuation_obj = traverse(chat_obj, INITIAL_CONTINUATION_PATH)
                 actions = traverse_or_none(chat_obj, INITIAL_ACTIONS_PATH)
                 return actions, ChatState(chat_obj, key, context, continuation_obj)
@@ -233,31 +256,43 @@ class Monitor:
             except Exception as e:
                 if retry == INIT_RETRIES - 1:
                     error_name = type(e).__name__
-                    logger.exception(f'Failed to initialize in monitor for video_id={self.info.id} ({error_name})')
+                    logger.exception(
+                        f"Failed to initialize in monitor for video_id={self.info.id} ({error_name})"
+                    )
                     self._stopped_flag.set()
                     raise AbortMonitor()
 
                 continue
 
-    async def get_next_state(self, session: aiohttp.ClientSession, prev_state: ChatState):
+    async def get_next_state(
+        self, session: aiohttp.ClientSession, prev_state: ChatState
+    ):
         try:
-            chat_obj = await self.get_next_chat(session, prev_state.continuation_obj, prev_state.key, prev_state.context)
+            chat_obj = await self.get_next_chat(
+                session, prev_state.continuation_obj, prev_state.key, prev_state.context
+            )
             continuation_obj = traverse(chat_obj, CONTINUATION_PATH)
             actions = traverse_or_none(chat_obj, ACTIONS_PATH)
 
-            return actions, ChatState(chat_obj, prev_state.key, prev_state.context, continuation_obj)
+            return actions, ChatState(
+                chat_obj, prev_state.key, prev_state.context, continuation_obj
+            )
 
         except KeyError as e:
-            logger.exception(f'KeyError for video_id={self.info.id} (keys {list(chat_obj.keys())})')
+            logger.exception(
+                f"KeyError for video_id={self.info.id} (keys {list(chat_obj.keys())})"
+            )
             raise RestartMonitor()
 
         except json.JSONDecodeError as e:
-            logger.exception(f'JSONDecodeError for video_id={self.info.id}')
+            logger.exception(f"JSONDecodeError for video_id={self.info.id}")
             raise RestartMonitor()
 
         except Exception as e:
             error_name = type(e).__name__
-            logger.exception(f'Error while fetching continuation for video_id={self.info.id} ({error_name})')
+            logger.exception(
+                f"Error while fetching continuation for video_id={self.info.id} ({error_name})"
+            )
             raise RestartMonitor()
 
     @util.http_session_method
@@ -286,7 +321,9 @@ class Monitor:
 
                 except Exception as e:
                     error_name = type(e).__name__
-                    logger.exception(f'Error while running monitor for video_id={self.info.id} ({error_name})')
+                    logger.exception(
+                        f"Error while running monitor for video_id={self.info.id} ({error_name})"
+                    )
                     self._stopped_flag.set()
                     return False
 
@@ -301,8 +338,8 @@ class Monitor:
 
             if termination_signals >= termination_cutoff:
                 logger.warning(
-                    f'Stopping monitor {termination_cutoff} iterations after termination '
-                    f'for video_id={self.info.id}'
+                    f"Stopping monitor {termination_cutoff} iterations after termination "
+                    f"for video_id={self.info.id}"
                 )
                 return True
 
@@ -321,18 +358,22 @@ class Monitor:
             except RestartMonitor:
                 restarts += 1
                 if restarts >= restart_cutoff:
-                    logger.warning(f'Stopping monitor after {restarts} restarts for video_id={self.info.id}')
+                    logger.warning(
+                        f"Stopping monitor after {restarts} restarts for video_id={self.info.id}"
+                    )
                     self._stopped_flag.set()
                 else:
-                    logger.warning(f'Restarting monitor for video_id={self.info.id} ({restarts}/{restart_cutoff})')
+                    logger.warning(
+                        f"Restarting monitor for video_id={self.info.id} ({restarts}/{restart_cutoff})"
+                    )
 
         await self._terminate_flag.wait()
 
-        logger.info(f'Serializing report for video_id={self.info.id}')
+        logger.info(f"Serializing report for video_id={self.info.id}")
         self.report.save()
         self._stopped_flag.set()
 
-        logger.info(f'Monitor finished for video_id={self.info.id}')
+        logger.info(f"Monitor finished for video_id={self.info.id}")
 
     def start(self, current_ioloop: tornado.ioloop.IOLoop = None):
         """Spawn monitor process in executor on the current IOLoop"""
@@ -340,10 +381,10 @@ class Monitor:
         if current_ioloop is None:
             current_ioloop = tornado.ioloop.IOLoop.current()
 
-        logger.info(f'Begin monitoring video_id={self.info.id}')
+        logger.info(f"Begin monitoring video_id={self.info.id}")
         current_ioloop.add_callback(self.run)
 
     def terminate(self):
         """Signal this process to terminate"""
-        logger.info(f'Received terminate signal for video_id={self.info.id}')
+        logger.info(f"Received terminate signal for video_id={self.info.id}")
         self._terminate_flag.set()
