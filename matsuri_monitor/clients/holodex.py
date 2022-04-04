@@ -6,11 +6,12 @@ import pandas as pd
 
 from matsuri_monitor import chat, util
 
-CHANNEL_ENDPOINT = 'https://api.holotools.app/v1/channels'
-LIVE_ENDPOINT = 'https://api.holotools.app/v1/live'
+CHANNEL_ENDPOINT = 'https://holodex.net/api/v2/channels'
+LIVE_ENDPOINT = 'https://holodex.net/api/v2/live'
+WATCHED_ORGS = ['Hololive', 'Nijisanji', 'VSpo', '774inc']
 
 
-class Jetri:
+class HoloDex:
 
     def __init__(self):
         self._lock = mp.Lock()
@@ -19,14 +20,18 @@ class Jetri:
     async def retrieve_channels(self, session: aiohttp.ClientSession):
         channels = []
 
-        for offset in range(0, 200, 50):
-            async with session.get(CHANNEL_ENDPOINT, params={'offset': offset, 'limit': 50}) as resp:
-                new_channels = (await resp.json())['channels']
-            
-            if len(new_channels) == 0:
-                break
+        for org in WATCHED_ORGS:
+            offset = 0
+            while True:
+                params = {'offset': offset, 'limit': 50, 'type': 'vtuber', 'org': org}
+                async with session.get(CHANNEL_ENDPOINT, params=params) as resp:
+                    new_channels = (await resp.json())
 
-            channels += new_channels
+                if not new_channels:
+                    break
+
+                channels += new_channels
+                offset += 50
 
         self.channels = pd.DataFrame.from_records(channels, index='id')
 
@@ -36,30 +41,44 @@ class Jetri:
         if not hasattr(self, 'channels'):
             await self.retrieve_channels(session)
 
-        async with session.get(LIVE_ENDPOINT) as resp:
-            lives = await resp.json()
+        lives = []
+        for org in WATCHED_ORGS:
+            offset = 0
+            while True:
+                params = {'offset': offset, 'limit': 50, 'status': 'live', 'org': org}
+                async with session.get(LIVE_ENDPOINT, params=params) as resp:
+                    new_lives = await resp.json()
+                
+                if not new_lives:
+                    break
 
-        include_cols = ['id', 'title', 'yt_video_key', 'live_start', 'channel']
+                lives += new_lives
+                offset += 50
 
-        lives_records = list(filter(
-            lambda lv: lv['yt_video_key'] is not None and lv['live_start'] is not None,
-            lives['live'],
-        ))
-        lives_records = list(map(lambda lv: {key: lv[key] for key in include_cols}, lives_records))
+        include_cols = ['id', 'title', 'live_start', 'channel']
 
-        for lv in lives_records:
-            lv['channel'] = lv['channel']['id']
+        lives_records = [
+            {
+                'id': lv['id'],
+                'title': lv['title'],
+                'live_start': lv['start_actual'],
+                'channel': lv['channel']['id'],
+            }
+            for lv in lives
+            if 'start_actual' in lv
+        ]
 
         if len(lives_records) > 0:
             lives_df = pd.DataFrame.from_records(
                 lives_records,
-                index='yt_video_key',
+                index='id',
                 columns=include_cols,
             )
+            lives_df = lives_df[~lives_df.index.duplicated(keep='first')]
         else:
             lives_df = pd.DataFrame(
-                index=pd.Series(name='yt_video_key', dtype=str),
-                columns=include_cols,
+                index=pd.Series(name='id', dtype=str),
+                columns=include_cols[1:],
             )
 
         with self._lock:
@@ -73,7 +92,7 @@ class Jetri:
     def get_channel_info(self, channel_id: str):
         """Returns a ChannelInfo object for the given channel ID"""
         return chat.ChannelInfo(
-            id=self.channels.loc[channel_id]['yt_channel_id'],
+            id=channel_id,
             name=self.channels.loc[channel_id]['name'],
             thumbnail_url=self.channels.loc[channel_id]['photo'],
         )

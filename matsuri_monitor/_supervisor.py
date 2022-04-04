@@ -26,8 +26,8 @@ class Supervisor:
         """
         super().__init__()
         self.interval = interval
-        self.jetri = clients.Jetri()
-        self.live_monitors: Dict[str, Monitor] = OrderedDict()
+        self.api = clients.HoloDex()
+        self.live_monitors: Dict[str, clients.Monitor] = OrderedDict()
         self.groupers = chat.Grouper.load()
         tornado.options.options.archives_dir.mkdir(exist_ok=True)
 
@@ -67,9 +67,9 @@ class Supervisor:
             del self.live_monitors[video_id]
 
         # Refresh currently live list and find lives to start and terminate
-        await self.jetri.update()
+        await self.api.update()
 
-        currently_live = set(self.jetri.currently_live)
+        currently_live = set(self.api.currently_live)
         currently_monitored = set(self.live_monitors.keys())
 
         new_lives = currently_live - currently_monitored
@@ -77,7 +77,7 @@ class Supervisor:
 
         # Start new lives
         for video_id in new_lives:
-            info = self.jetri.get_live_info(video_id)
+            info = self.api.get_live_info(video_id)
 
             report = chat.LiveReport(info)
             report.set_groupers(self.groupers)
