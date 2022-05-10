@@ -6,15 +6,16 @@ from dataclasses import dataclass
 from datetime import datetime
 from itertools import groupby
 from pathlib import Path
-from typing import Callable, List
+from typing import List
 
 import tornado.options
-from cachetools import LRUCache, cached
 
 from matsuri_monitor.chat.group_list import GroupList
 from matsuri_monitor.chat.grouper import Grouper
 from matsuri_monitor.chat.info import VideoInfo
 from matsuri_monitor.chat.message import Message
+
+SAVE_ORGS = ["Hololive"]
 
 tornado.options.define(
     "archives-dir",
@@ -80,7 +81,7 @@ class LiveReport:
             tornado.options.options.archives_dir / f"{report_basename}.json.gz"
         )
 
-        if tornado.options.options.dump_chat:
+        if tornado.options.options.dump_chat and self.info.channel.org in SAVE_ORGS:
             messages_json = [msg.json() for msg in self.messages]
             messages_path = (
                 tornado.options.options.archives_dir / f"{report_basename}_chat.json.gz"

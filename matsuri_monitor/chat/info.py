@@ -11,6 +11,7 @@ class ChannelInfo:
     id: str
     name: str
     thumbnail_url: str
+    org: str
 
     @property
     def url(self):

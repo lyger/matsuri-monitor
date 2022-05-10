@@ -31,6 +31,9 @@ class HoloDex:
                 if not new_channels:
                     break
 
+                for channel in new_channels:
+                    channel["org"] = org
+
                 channels += new_channels
                 offset += 50
 
@@ -92,10 +95,12 @@ class HoloDex:
 
     def get_channel_info(self, channel_id: str):
         """Returns a ChannelInfo object for the given channel ID"""
+        channel_row = self.channels.loc[channel_id]
         return chat.ChannelInfo(
             id=channel_id,
-            name=self.channels.loc[channel_id]["name"],
-            thumbnail_url=self.channels.loc[channel_id]["photo"],
+            name=channel_row["name"],
+            thumbnail_url=channel_row["photo"],
+            org=channel_row["org"],
         )
 
     def get_live_info(self, video_id: str):
