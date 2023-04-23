@@ -9,7 +9,7 @@ from matsuri_monitor import chat, util
 
 CHANNEL_ENDPOINT = "https://holodex.net/api/v2/channels"
 LIVE_ENDPOINT = "https://holodex.net/api/v2/live"
-WATCHED_ORGS = ["Hololive", "Nijisanji", "VSpo", "774inc"]
+WATCHED_ORGS = ["Hololive", "Nijisanji", "VSpo", "774inc", "Neo-Porte"]
 HOLODEX_API_KEY = os.getenv("HOLODEX_API_KEY")
 HEADERS = {"X-APIKEY": HOLODEX_API_KEY}
 
