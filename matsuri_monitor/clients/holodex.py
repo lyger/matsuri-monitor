@@ -31,7 +31,7 @@ class HoloDex:
                 async with session.get(
                     CHANNEL_ENDPOINT, params=params, headers=HEADERS
                 ) as resp:
-                    new_channels = await resp.json()
+                    new_channels = await resp.json(content_type=None)
 
                 if not new_channels:
                     break
@@ -58,7 +58,7 @@ class HoloDex:
                 async with session.get(
                     LIVE_ENDPOINT, params=params, headers=HEADERS
                 ) as resp:
-                    new_lives = await resp.json()
+                    new_lives = await resp.json(content_type=None)
 
                 if not new_lives:
                     break
