@@ -1,4 +1,5 @@
 import multiprocessing as mp
+import os
 from datetime import datetime, timezone
 
 import aiohttp
@@ -9,6 +10,8 @@ from matsuri_monitor import chat, util
 CHANNEL_ENDPOINT = "https://holodex.net/api/v2/channels"
 LIVE_ENDPOINT = "https://holodex.net/api/v2/live"
 WATCHED_ORGS = ["Hololive", "Nijisanji", "VSpo", "774inc"]
+HOLODEX_API_KEY = os.getenv("HOLODEX_API_KEY")
+HEADERS = {"X-APIKEY": HOLODEX_API_KEY}
 
 
 class HoloDex:
@@ -25,7 +28,9 @@ class HoloDex:
             offset = 0
             while True:
                 params = {"offset": offset, "limit": 50, "type": "vtuber", "org": org}
-                async with session.get(CHANNEL_ENDPOINT, params=params) as resp:
+                async with session.get(
+                    CHANNEL_ENDPOINT, params=params, headers=HEADERS
+                ) as resp:
                     new_channels = await resp.json()
 
                 if not new_channels:
@@ -41,7 +46,7 @@ class HoloDex:
 
     @util.http_session_method
     async def update(self, session: aiohttp.ClientSession):
-        """Re-accesses jetri endpoints and updates active lives"""
+        """Re-accesses holodex endpoints and updates active lives"""
         if not hasattr(self, "channels"):
             await self.retrieve_channels(session)
 
@@ -50,7 +55,9 @@ class HoloDex:
             offset = 0
             while True:
                 params = {"offset": offset, "limit": 50, "status": "live", "org": org}
-                async with session.get(LIVE_ENDPOINT, params=params) as resp:
+                async with session.get(
+                    LIVE_ENDPOINT, params=params, headers=HEADERS
+                ) as resp:
                     new_lives = await resp.json()
 
                 if not new_lives:
