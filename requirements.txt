@@ -4,5 +4,5 @@ cachetools==3.1.1
 jsonschema==3.0.2
 lxml==4.5.0
 pandas==1.0.3
-tornado==6.0.4
+tornado==6.3.2
 requests==2.22.0
