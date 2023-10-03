@@ -1,8 +1,6 @@
 import gzip
 import json
 import multiprocessing as mp
-from collections import OrderedDict
-from dataclasses import dataclass
 from datetime import datetime
 from itertools import groupby
 from pathlib import Path
@@ -29,6 +27,34 @@ tornado.options.define(
     type=bool,
     help="Also dump all stream comments to archive dir",
 )
+
+
+def combine_reports(report1: dict, report2: dict):
+    new_report = dict(report1)
+    gls1 = report1["group_lists"]
+    gls2 = report2["group_lists"]
+    desc2i1 = {gl["description"]: i for i, gl in enumerate(gls1)}
+    desc2i2 = {gl["description"]: i for i, gl in enumerate(gls2)}
+    all_descs = list(set(list(desc2i1) + list(desc2i2)))
+    new_gls = []
+    for desc in all_descs:
+        # Only in report 2
+        if desc not in desc2i1:
+            new_gls.append(dict(gls2[desc2i2[desc]]))
+        # Only in report 1
+        elif desc not in desc2i2:
+            new_gls.append(dict(gls1[desc2i1[desc]]))
+        # In both
+        else:
+            gl1 = gls1[desc2i1[desc]]
+            gl2 = gls2[desc2i2[desc]]
+            new_groups = gl1["groups"] + gl2["groups"]
+            new_groups.sort(key=lambda g: g["timestamp"])
+            new_gl = dict(gl1)
+            new_gl["groups"] = new_groups
+            new_gls.append(new_gl)
+    new_report["group_lists"] = new_gls
+    return new_report
 
 
 class LiveReport:
@@ -87,16 +113,26 @@ class LiveReport:
                 tornado.options.options.archives_dir / f"{report_basename}_chat.json.gz"
             )
 
-            if not messages_path.exists():
-                with gzip.open(messages_path, "wt") as dump_file:
-                    json.dump(messages_json, dump_file)
+            if messages_path.exists():
+                with gzip.open(messages_path, "rt") as existing_file:
+                    existing_messages = json.load(existing_file)
+                messages_json = existing_messages + messages_json
+
+            with gzip.open(messages_path, "wt") as dump_file:
+                json.dump(messages_json, dump_file)
 
         if len(self) == 0:
             return
 
-        if not report_path.exists():
-            with gzip.open(report_path, "wt") as report_file:
-                json.dump(self.json(), report_file)
+        report_json = self.json()
+
+        if report_path.exists():
+            with gzip.oepn(report_path, "rt") as existing_file:
+                existing_report = json.load(existing_file)
+            report_json = combine_reports(existing_report, report_json)
+
+        with gzip.open(report_path, "wt") as report_file:
+            json.dump(report_json, report_file)
 
     def json(self) -> dict:
         """Return a JSON representation of this report"""
