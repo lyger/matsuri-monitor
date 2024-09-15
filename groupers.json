@@ -1,41 +1,41 @@
 [
-    {
-        "type": "regex",
-        "value": "まつり",
-        "interval": 10,
-        "min_len": 5,
-        "notify": true,
-        "unique_author": true,
-        "skip_channels": ["UCQ0UDLQCjY0rmuxCDE38FGg"]
-    },
-    {
-        "type": "regex",
-        "value": "matsuri",
-        "interval": 10,
-        "min_len": 5,
-        "notify": true,
-        "unique_author": true,
-        "skip_channels": ["UCQ0UDLQCjY0rmuxCDE38FGg"]
-    },
-    {
-        "type": "username",
-        "value": "Matsuri Channel 夏色まつり",
-        "interval": 5,
-        "notify": true
-    },
-    {
-        "type": "regex",
-        "value": "bi(boo|jou)",
-        "interval": 120,
-        "min_len": 5,
-        "notify": true,
-        "unique_author": true,
-        "skip_channels": ["UC9p_lqQ0FEDz327Vgf5JwqA"]
-    },
-    {
-        "type": "username",
-        "value": "Koseki Bijou Ch. hololive-EN",
-        "interval": 5,
-        "notify": true
-    }
+  {
+    "type": "regex",
+    "value": "まつり",
+    "interval": 10,
+    "min_len": 5,
+    "notify": true,
+    "unique_author": true,
+    "skip_channels": ["UCQ0UDLQCjY0rmuxCDE38FGg"]
+  },
+  {
+    "type": "regex",
+    "value": "matsuri",
+    "interval": 10,
+    "min_len": 5,
+    "notify": true,
+    "unique_author": true,
+    "skip_channels": ["UCQ0UDLQCjY0rmuxCDE38FGg"]
+  },
+  {
+    "type": "username",
+    "value": "Matsuri Channel 夏色まつり",
+    "interval": 5,
+    "notify": true
+  },
+  {
+    "type": "regex",
+    "value": "bi(boo|jou)",
+    "interval": 10,
+    "min_len": 5,
+    "notify": true,
+    "unique_author": true,
+    "skip_channels": ["UC9p_lqQ0FEDz327Vgf5JwqA"]
+  },
+  {
+    "type": "username",
+    "value": "Koseki Bijou Ch. hololive-EN",
+    "interval": 5,
+    "notify": true
+  }
 ]
