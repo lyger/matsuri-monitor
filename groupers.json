@@ -25,16 +25,7 @@
   },
   {
     "type": "regex",
-    "value": "(biboo|bijou|beeb)",
-    "interval": 10,
-    "min_len": 5,
-    "notify": true,
-    "unique_author": true,
-    "skip_channels": ["UC9p_lqQ0FEDz327Vgf5JwqA"]
-  },
-  {
-    "type": "regex",
-    "value": "(ビジュ|びじゅ|ビブ|びぶ)ー",
+    "value": "(biboo|bijou|beeb|ビジュー|びじゅー|ビブー|びぶー|びぶたん)",
     "interval": 10,
     "min_len": 5,
     "notify": true,
