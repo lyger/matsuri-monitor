@@ -33,6 +33,15 @@
     "skip_channels": ["UC9p_lqQ0FEDz327Vgf5JwqA"]
   },
   {
+    "type": "regex",
+    "value": "(ビジュ|びじゅ|ビブ|びぶ)ー",
+    "interval": 10,
+    "min_len": 5,
+    "notify": true,
+    "unique_author": true,
+    "skip_channels": ["UC9p_lqQ0FEDz327Vgf5JwqA"]
+  },
+  {
     "type": "username",
     "value": "Koseki Bijou Ch. hololive-EN",
     "interval": 5,
