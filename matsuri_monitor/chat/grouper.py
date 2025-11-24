@@ -87,6 +87,8 @@ class Grouper:
                 description = f'Comment matches "{condition_value}"'
             elif condition_type == "username":
                 description = f'Comment from user "{condition_value}"'
+            else:
+                continue
             groupers.append(
                 cls(
                     condition=condition,

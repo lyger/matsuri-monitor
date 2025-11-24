@@ -24,6 +24,12 @@
     "notify": true
   },
   {
+    "type": "username",
+    "value": "@NatsuiroMatsuri",
+    "interval": 5,
+    "notify": true
+  },
+  {
     "type": "regex",
     "value": "(biboo|bijou|beeb|ビジュー|びじゅー|ビブー|びぶー|びぶたん)",
     "interval": 10,
@@ -35,6 +41,12 @@
   {
     "type": "username",
     "value": "Koseki Bijou Ch. hololive-EN",
+    "interval": 5,
+    "notify": true
+  },
+  {
+    "type": "username",
+    "value": "@KosekiBijou",
     "interval": 5,
     "notify": true
   }
